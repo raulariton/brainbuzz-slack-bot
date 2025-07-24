@@ -1,7 +1,7 @@
 import pkg from '@slack/bolt';
 import dotenv from 'dotenv';
 
-dotenv.config();
+dotenv.config({quiet: true});
 const {App} = pkg;
 
 const app = new App({
@@ -41,9 +41,9 @@ app.message('special', async ({message, say}) => {
                         "action_id": "button_click"
                     }
                 ],
-                text: "Click the button below to interact with me!"
             }
         ],
+        text: "Click the button below to interact with me!"
     });
 });
 
