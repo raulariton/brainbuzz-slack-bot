@@ -263,7 +263,7 @@ app.action('button_click', async ({ body, ack, say }) => {
     await say(`Hey <@${body.user.id}>! You clicked the button!`);
 });
 
-// Bot start
+// Bot start.
 (async () => {
     await app.start(process.env.PORT || 3000);
     app.logger.info('BrainBuzz is up and running!');
