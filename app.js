@@ -132,16 +132,17 @@ app.view('brainbuzz_modal', async ({ ack, body, view, client }) => {
 
     try {
         // for testing 
-        //await client.chat.postMessage({
-        //channel: body.user.id,  
-        //text: `BrainBuzz quiz selected: *${quizType}*`
-        //});
+        /*await client.chat.postMessage({
+        channel: body.user.id,  
+        text: "BrainBuzz quiz selected: *" + quizType + "*"
+        });*/
 
-        // for normal messages in channels
-        // await client.chat.postMessage({
-          //  channel: channel,
-           // text: `BrainBuzz quiz selected: *${quizType}*`
-        // });
+         //for normal messages in channels
+         /*await client.chat.postMessage({
+         channel: channel,
+         text: "BrainBuzz quiz selected: *" + quizType + "*"
+         });*/
+
     } catch (error) {
         console.error('Error posting message: ', error);
     }
