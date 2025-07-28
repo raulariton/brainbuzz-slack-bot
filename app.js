@@ -47,6 +47,109 @@ app.message('special', async ({message, say}) => {
     });
 });
 
+// slash command for the quizz
+app.command('/brainbuzz', async ({ ack, body, client }) => {
+    await ack(); // acknowledge the command
+ try {
+        await client.views.open({  
+            trigger_id: body.trigger_id,
+            view: {
+                type: 'modal',
+                callback_id: 'brainbuzz_modal',
+                title: {
+                    type: 'plain_text',
+                    text: 'BrainBuzz Quiz',
+                },
+                submit: {
+                    type: 'plain_text',
+                    text: 'Submit'
+                },
+                close: {
+                    type: 'plain_text',
+                    text: 'Cancel'
+                },
+                blocks: [
+                    {
+                        type: 'input',
+                        block_id: 'quiz_type_block',
+                        element: {
+                            type: 'static_select',
+                            action_id: 'quiz_type',
+                            placeholder: {
+                                type: 'plain_text',
+                                text: 'Select a quiz type'
+                            },
+                            options: [
+                                {
+                                    text: { type: 'plain_text', text: 'Historical/current events based on the current date' },
+                                    value: 'history'
+                                },
+                                {
+                                    text: { type: 'plain_text', text: 'Funny stuff/ ice breakers' },
+                                    value: 'funny'
+                                },
+                                {
+                                    text: { type: 'plain_text', text: 'Movie/TV Quote Identification' },
+                                    value: 'movie'
+                                }
+                            ]
+                        },
+                        label: {
+                            type: 'plain_text',
+                            text: 'Quiz Type'
+                        }
+                    },
+                    {
+                        type: 'input',
+                        block_id: 'channel_block',
+                        element: {
+                            type: 'conversations_select',
+                            action_id: 'channel_select',
+                            placeholder: {
+                                type: 'plain_text',
+                                text: 'Select a channel'
+                            }
+                        },
+                        label: {
+                            type: 'plain_text',
+                            text: 'Channel'
+                        }
+                    }
+                ]
+            }
+        });
+    } catch (error) {
+        console.error(error);
+    }
+});
+
+// handle submit from the modal (fereastra)
+app.view('brainbuzz_modal', async ({ ack, body, view, client }) => {
+    await ack(); // acknowledge the submit 
+
+    const quizType = view.state.values.quiz_type_block.quiz_type.selected_option.value;
+    const channel = view.state.values.channel_block.channel_select.selected_conversation;
+
+    try {
+        // for testing 
+        /*await client.chat.postMessage({
+        channel: body.user.id,  
+        text: "BrainBuzz quiz selected: *" + quizType + "*"
+        });*/
+
+         //for normal messages in channels
+         /*await client.chat.postMessage({
+         channel: channel,
+         text: "BrainBuzz quiz selected: *" + quizType + "*"
+         });*/
+
+    } catch (error) {
+        console.error('Error posting message: ', error);
+    }
+});
+
+
+
 // listen to button clicks
 app.action('button_click', async ({body, ack, say}) => {
     // acknowledge the action request
