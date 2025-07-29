@@ -81,80 +81,91 @@ app.command('/brainbuzz', async ({ ack, body, client }) => {
                     text: 'Cancel'
                 },
                 blocks: [
-                    {
-                        type: 'input',
-                        block_id: 'quiz_type_block',
-                        element: {
-                            type: 'static_select',
-                            action_id: 'quiz_type',
-                            placeholder: {
-                                type: 'plain_text',
-                                text: 'Select a quiz type'
-                            },
-                            options: [
-                                {
-                                    text: { type: 'plain_text', text: 'Historical/current events based on the current date' },
-                                    value: 'history'
-                                },
-                                {
-                                    text: { type: 'plain_text', text: 'Funny stuff/ ice breakers' },
-                                    value: 'funny'
-                                },
-                                {
-                                    text: { type: 'plain_text', text: 'Movie/TV Quote Identification' },
-                                    value: 'movie'
-                                }
-                            ]
-                        },
-                        label: {
-                            type: 'plain_text',
-                            text: 'Quiz Type'
-                        }
-                    },
-                    {
-                        type: 'section',
-                        block_id: 'destination_block',
-                        text: {
-                            type: 'mrkdwn',
-                            text: 'Where should the quiz be sent?'
-                        },
-                        accessory: {
-                            type: 'static_select',
-                            action_id: 'destination_select',
-                            placeholder: {
-                                type: 'plain_text',
-                                text: 'Select destination'
-                            },
-                            options: [
-                                {
-                                    text: { type: 'plain_text', text: 'Send to me (private DM)' },
-                                    value: 'private'
-                                },
-                                {
-                                    text: { type: 'plain_text', text: 'Send to a channel' },
-                                    value: 'channel'
-                                }
-                            ]
-                        }
-                    },
-                    {
-                        type: 'input',
-                        block_id: 'channel_block',
-                        optional: true,
-                        element: {
-                            type: 'conversations_select',
-                            action_id: 'channel_select',
-                            placeholder: {
-                                type: 'plain_text',
-                                text: 'Select a channel'
-                            }
-                        },
-                        label: {
-                            type: 'plain_text',
-                            text: 'Channel (if selected above)'
-                        }
-                    }
-                ]
+    {
+        type: 'input',
+        block_id: 'quiz_type_block',
+        element: {
+            type: 'static_select',
+            action_id: 'quiz_type',
+            placeholder: {
+                type: 'plain_text',
+                text: 'Select a quiz type'
+            },
+            options: [
+                {
+                    text: { type: 'plain_text', text: 'Historical/current events based on the current date' },
+                    value: 'history'
+                },
+                {
+                    text: { type: 'plain_text', text: 'Funny stuff/ ice breakers' },
+                    value: 'funny'
+                },
+                {
+                    text: { type: 'plain_text', text: 'Movie/TV Quote Identification' },
+                    value: 'movie'
+                }
+            ]
+        },
+        label: {
+            type: 'plain_text',
+            text: 'Quiz Type'
+        }
+    },
+    {
+        type: 'input',
+        block_id: 'destination_block',
+        element: {
+            type: 'static_select',
+            action_id: 'destination_select',
+            placeholder: {
+                type: 'plain_text',
+                text: 'Select destination'
+            },
+            options: [
+                {
+                    text: { type: 'plain_text', text: 'Send to me (private DM)' },
+                    value: 'private'
+                },
+                {
+                    text: { type: 'plain_text', text: 'Send to a channel' },
+                    value: 'channel'
+                }
+            ]
+        },
+        label: {
+            type: 'plain_text',
+            text: 'Destination'
+        }
+    },
+    {
+        type: 'input',
+        block_id: 'channel_block',
+        optional: true,
+        element: {
+            type: 'static_select',
+            action_id: 'channel_select',
+            placeholder: {
+                type: 'plain_text',
+                text: 'Select a channel'
+            },
+            options: [
+                {
+                    text: { type: 'plain_text', text: '#general' },
+                    value: 'C12345' // ID-ul canalului
+                },
+                {
+                    text: { type: 'plain_text', text: '#random' },
+                    value: 'C67890'
+                }
+            ]
+        },
+        label: {
+            type: 'plain_text',
+            text: 'Channel (if selected above)'
+        }
+    }
+]
+
             }
         });
     } catch (error) {
