@@ -81,7 +81,7 @@ app.command('/brainbuzz', async ({ ack, body, client }) => {
                     text: 'Cancel'
                 },
                 blocks: [
-    {
+            {
         type: 'input',
         block_id: 'quiz_type_block',
         element: {
@@ -130,40 +130,35 @@ app.command('/brainbuzz', async ({ ack, body, client }) => {
                     text: { type: 'plain_text', text: 'Send to a channel' },
                     value: 'channel'
                 }
-            ]
-        },
+                    ]
+                },
         label: {
             type: 'plain_text',
             text: 'Destination'
         }
     },
     {
-        type: 'input',
-        block_id: 'channel_block',
-        optional: true,
-        element: {
-            type: 'static_select',
-            action_id: 'channel_select',
-            placeholder: {
-                type: 'plain_text',
-                text: 'Select a channel'
-            },
-            options: [
-                {
-                    text: { type: 'plain_text', text: '#general' },
-                    value: 'C12345' // ID-ul canalului
-                },
-                {
-                    text: { type: 'plain_text', text: '#random' },
-                    value: 'C67890'
-                }
-            ]
-        },
-        label: {
+    type: 'input',
+    block_id: 'channel_block',
+    optional: true,
+    element: {
+        type: 'conversations_select', // înlocuim static_select cu conversations_select
+        action_id: 'channel_select',
+        placeholder: {
             type: 'plain_text',
-            text: 'Channel (if selected above)'
+            text: 'Select a channel'
+        },
+        filter: {
+            include: ['public', 'private'],
+            exclude_bot_users: true
         }
+    },
+    label: {
+        type: 'plain_text',
+        text: 'Channel (if selected above)'
     }
+}
+
 ]
 
             }
