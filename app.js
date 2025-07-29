@@ -26,7 +26,7 @@ const hardcodedQuiz = {
 
 // Listen to incoming messages that contain "ceau"
 app.message('ceau', async ({ message, say }) => {
-    await say(`Ceau <@${message.user}>!`);
+    await say(`Ceau Sefule <@${message.user}>!`);
 });
 
 // Listen to incoming messages that contain "hello"
