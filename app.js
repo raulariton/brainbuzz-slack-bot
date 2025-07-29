@@ -1,5 +1,8 @@
 import pkg from '@slack/bolt';
 import dotenv from 'dotenv';
+import axios from 'axios';
+const quizTypeMap = new Map();
+const timeoutMap = new Map();
 
 dotenv.config({ quiet: true });
 const { App } = pkg;
@@ -12,21 +15,9 @@ const app = new App({
 });
 
 
-// Hardcoded Quizz
-const hardcodedQuiz = {
-    quizText: "What event occurred on July 28, 2025?",
-    options: [
-        "Tonga Volcano Eruption, 2018",
-        "Apple Unveils iPhone, 2007",
-        "NASA's Curiosity Rover Lands on Mars, 2012",
-        "Solar Eclipse Observed Across Parts of the World, 2025"
-    ],
-    answer: "Solar Eclipse Observed Across Parts of the World, 2025"
-};
-
 // Listen to incoming messages that contain "ceau"
 app.message('ceau', async ({ message, say }) => {
-    await say(`Ceau <@${message.user}>!`);
+    await say(`Ceau Sefule <@${message.user}>!`);
 });
 
 // Listen to incoming messages that contain "hello"
@@ -112,13 +103,9 @@ app.command('/brainbuzz', async ({ ack, body, client }) => {
                         }
                     },
                     {
-                        type: 'section',
+                        type: 'input',
                         block_id: 'destination_block',
-                        text: {
-                            type: 'mrkdwn',
-                            text: 'Where should the quiz be sent?'
-                        },
-                        accessory: {
+                        element: {
                             type: 'static_select',
                             action_id: 'destination_select',
                             placeholder: {
@@ -135,6 +122,10 @@ app.command('/brainbuzz', async ({ ack, body, client }) => {
                                     value: 'channel'
                                 }
                             ]
+                        },
+                        label: {
+                            type: 'plain_text',
+                            text: 'Destination'
                         }
                     },
                     {
@@ -142,11 +133,15 @@ app.command('/brainbuzz', async ({ ack, body, client }) => {
                         block_id: 'channel_block',
                         optional: true,
                         element: {
-                            type: 'conversations_select',
+                            type: 'conversations_select', // înlocuim static_select cu conversations_select
                             action_id: 'channel_select',
                             placeholder: {
                                 type: 'plain_text',
                                 text: 'Select a channel'
+                            },
+                            filter: {
+                                include: ['public', 'private'],
+                                exclude_bot_users: true
                             }
                         },
                         label: {
@@ -154,7 +149,9 @@ app.command('/brainbuzz', async ({ ack, body, client }) => {
                             text: 'Channel (if selected above)'
                         }
                     }
+
                 ]
+
             }
         });
     } catch (error) {
@@ -162,16 +159,33 @@ app.command('/brainbuzz', async ({ ack, body, client }) => {
     }
 });
 
-// After you press submit from the modal
+// After you press submit from the modal.
 app.view('brainbuzz_modal', async ({ ack, body, view, client }) => {
-    await ack();
+    const errors = {};
 
-    const destination = view.state.values.destination_block.destination_select.selected_option.value;
+    const quizType = view.state.values.quiz_type_block.quiz_type.selected_option;
+    const destination = view.state.values.destination_block.destination_select.selected_option;
+
+    if (!quizType) {
+        errors['quiz_type_block'] = 'You must select a quiz type.';
+    }
+
+    if (!destination) {
+        errors['destination_block'] = 'You must select a destination.';
+    }
+
+    if (Object.keys(errors).length > 0) {
+        await ack({ response_action: 'errors', errors });
+        return;
+    }
+
+    await ack(); // valid
+
+    quizTypeMap.set(body.user.id, quizType.value);
+
     const selectedChannel = view.state.values.channel_block.channel_select?.selected_conversation;
+    let targetChannel = destination.value === 'private' ? body.user.id : selectedChannel || body.channel?.id;
 
-    let targetChannel = destination === 'private' ? body.user.id : selectedChannel || body.channel.id;
-
-    // Start Quiz button (UI)
     try {
         await client.chat.postMessage({
             channel: targetChannel,
@@ -198,24 +212,59 @@ app.view('brainbuzz_modal', async ({ ack, body, view, client }) => {
     }
 });
 
-// When the button start_quiz is pressed
+
+
 app.action('start_quiz', async ({ ack, body, client }) => {
     await ack();
 
     const userId = body.user.id;
+    const selectedQuizType = quizTypeMap.get(userId);
+
+    const typeMap = {
+        history: 'historical',
+        funny: 'icebreaker',
+        movie: 'movie_quote'
+    };
+
+    const backendType = typeMap[selectedQuizType];
+    if (!backendType) {
+        console.error(`Invalid quiz type selected: ${selectedQuizType}`);
+        return;
+    }
+
     try {
-        await client.views.open({
+        // ✅ 1. Ia quiz-ul din backend (care trebuie să conțină quiz_id)
+        const response = await axios.get(`http://localhost:3000/quiz?type=${backendType}`);
+        const quiz = response.data;
+        console.log('🎯 Quiz primit de la backend:', quiz);
+
+        // ✅ 2. Salvează answer și quiz_id în metadata, ca să le poți folosi la submit
+        const result = await client.views.open({
             trigger_id: body.trigger_id,
             view: {
                 type: 'modal',
                 callback_id: 'quiz_submit',
+                private_metadata: JSON.stringify({ 
+                    answer: quiz.answer, 
+                    quiz_id: quiz.quiz_id   // <-- Acum îl trimitem
+                }),
                 title: { type: 'plain_text', text: 'BrainBuzz Quiz' },
                 submit: { type: 'plain_text', text: 'Submit' },
                 close: { type: 'plain_text', text: 'Cancel' },
                 blocks: [
                     {
+                        type: "context",
+                        block_id: "timer_block",
+                        elements: [
+                            {
+                                type: "plain_text",
+                                text: "⏳ Time remaining: 15 seconds"
+                            }
+                        ]
+                    },
+                    {
                         type: "section",
-                        text: { type: "mrkdwn", text: `*${hardcodedQuiz.quizText}*` }
+                        text: { type: "mrkdwn", text: `*${quiz.quizText}*` }
                     },
                     {
                         type: "input",
@@ -224,38 +273,106 @@ app.action('start_quiz', async ({ ack, body, client }) => {
                         element: {
                             type: "radio_buttons",
                             action_id: "quiz_answer",
-                            options: hardcodedQuiz.options.map(opt => ({
-                                text: { type: "plain_text", text: opt },
-                                value: opt
+                            options: quiz.options.map(option => ({
+                                text: { type: "plain_text", text: option },
+                                value: option
                             }))
                         }
                     }
                 ]
             }
         });
+
+        // ✅ 3. Pornește timer-ul de 15 secunde
+        const timeoutId = setTimeout(async () => {
+            try {
+                await client.chat.postMessage({
+                    channel: userId,
+                    text: "❌ Failed to complete quiz in the given time.",
+                });
+
+                await client.views.update({
+                    view_id: result.view.id,
+                    hash: result.view.hash,
+                    view: {
+                        type: "modal",
+                        title: { type: "plain_text", text: "Quiz expired" },
+                        close: { type: "plain_text", text: "Close" },
+                        blocks: [
+                            {
+                                type: "section",
+                                text: {
+                                    type: "plain_text",
+                                    text: "⏱️ Time's up! You didn't answer in time."
+                                }
+                            }
+                        ]
+                    }
+                });
+            } catch (error) {
+                console.error("Timeout update error:", error);
+            }
+        }, 15000);
+
+        timeoutMap.set(userId, timeoutId);
+
     } catch (error) {
-        console.error('Error opening quiz modal: ', error);
+        console.error('Error fetching or displaying quiz:', error.message);
     }
 });
+
+
 
 // After the user submits the answer it gets checked
 app.view('quiz_submit', async ({ ack, body, view, client }) => {
     await ack();
 
-    const selected = view.state.values.quiz_answer_block.quiz_answer.selected_option.value;
-    const correct = selected === hardcodedQuiz.answer;
+    // ✅ Oprește timer-ul dacă userul a răspuns
+    const timeoutId = timeoutMap.get(body.user.id);
+    if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutMap.delete(body.user.id);
+    }
 
+    const selected = view.state.values.quiz_answer_block.quiz_answer.selected_option.value;
+    const metadata = JSON.parse(view.private_metadata);
+    const correctAnswer = metadata.answer;
+    const correct = selected === correctAnswer;
+
+    // ✅ Afișează rezultatul în Slack
     try {
         await client.chat.postMessage({
             channel: body.user.id,
             text: correct
-                ? `Correct! The answer is *${hardcodedQuiz.answer}*.`
-                : `Wrong! You selected *${selected}*, but the correct answer is *${hardcodedQuiz.answer}*.`
+                ? `✅ Correct! The answer is *${correctAnswer}*.`  
+                : `❌ Wrong! You selected *${selected}*, but the correct answer was *${correctAnswer}*.` 
         });
     } catch (error) {
-        console.error('Error sending result: ', error);
+        console.error('Error sending quiz result: ', error);
+    }
+
+    // ✅ Trimite rezultatul către backend
+    try {
+        // Preia informații utile despre user
+        const displayName = body.user.name || 'unknown';
+        const profilePic = body.user.profile?.image_72 || '';
+
+        await axios.post('http://localhost:3000/answers', {
+            user_id: body.user.id,
+            quiz_id: metadata.quiz_id, // <-- UUID valid acum
+            correct: correct,
+            user_data: {
+                display_name: displayName,
+                profile_picture_url: profilePic
+            }
+        });
+
+        console.log('✅ Answer sent to backend successfully.');
+    } catch (error) {
+        console.error('❌ Failed to send answer to backend:', error.message);
     }
 });
+
 
 // Listening for button clicks
 app.action('button_click', async ({ body, ack, say }) => {
