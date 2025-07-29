@@ -162,7 +162,7 @@ app.command('/brainbuzz', async ({ ack, body, client }) => {
     }
 });
 
-// After you press submit from the modal
+// After you press submit from the modal.
 app.view('brainbuzz_modal', async ({ ack, body, view, client }) => {
     await ack();
 
