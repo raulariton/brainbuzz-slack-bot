@@ -149,9 +149,7 @@ app.command('/brainbuzz', async ({ ack, body, client }) => {
                             text: 'Channel (if selected above)'
                         }
                     }
-
                 ]
-
             }
         });
     } catch (error) {
@@ -212,8 +210,7 @@ app.view('brainbuzz_modal', async ({ ack, body, view, client }) => {
     }
 });
 
-
-
+// When the button start_quiz is pressed
 app.action('start_quiz', async ({ ack, body, client }) => {
     await ack();
 
@@ -244,8 +241,8 @@ app.action('start_quiz', async ({ ack, body, client }) => {
             view: {
                 type: 'modal',
                 callback_id: 'quiz_submit',
-                private_metadata: JSON.stringify({ 
-                    answer: quiz.answer, 
+                private_metadata: JSON.stringify({
+                    answer: quiz.answer,
                     quiz_id: quiz.quiz_id   // <-- Acum îl trimitem
                 }),
                 title: { type: 'plain_text', text: 'BrainBuzz Quiz' },
@@ -321,8 +318,6 @@ app.action('start_quiz', async ({ ack, body, client }) => {
     }
 });
 
-
-
 // After the user submits the answer it gets checked
 app.view('quiz_submit', async ({ ack, body, view, client }) => {
     await ack();
@@ -344,8 +339,8 @@ app.view('quiz_submit', async ({ ack, body, view, client }) => {
         await client.chat.postMessage({
             channel: body.user.id,
             text: correct
-                ? `✅ Correct! The answer is *${correctAnswer}*.`  
-                : `❌ Wrong! You selected *${selected}*, but the correct answer was *${correctAnswer}*.` 
+                ? `✅ Correct! The answer is *${correctAnswer}*.`
+                : `❌ Wrong! You selected *${selected}*, but the correct answer was *${correctAnswer}*.`
         });
     } catch (error) {
         console.error('Error sending quiz result: ', error);
@@ -373,7 +368,6 @@ app.view('quiz_submit', async ({ ack, body, view, client }) => {
         console.error('❌ Failed to send answer to backend:', error.message);
     }
 });
-
 
 // Listening for button clicks
 app.action('button_click', async ({ body, ack, say }) => {
