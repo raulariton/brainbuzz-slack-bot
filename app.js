@@ -149,9 +149,7 @@ app.command('/brainbuzz', async ({ ack, body, client }) => {
                             text: 'Channel (if selected above)'
                         }
                     }
-
                 ]
-
             }
         });
     } catch (error) {
@@ -212,8 +210,7 @@ app.view('brainbuzz_modal', async ({ ack, body, view, client }) => {
     }
 });
 
-
-
+// When the button start_quiz is pressed
 app.action('start_quiz', async ({ ack, body, client }) => {
     await ack();
 
@@ -233,15 +230,21 @@ app.action('start_quiz', async ({ ack, body, client }) => {
     }
 
     try {
+        // ✅ 1. Ia quiz-ul din backend (care trebuie să conțină quiz_id)
         const response = await axios.get(`http://localhost:3000/quiz?type=${backendType}`);
         const quiz = response.data;
+        console.log('🎯 Quiz primit de la backend:', quiz);
 
+        // ✅ 2. Salvează answer și quiz_id în metadata, ca să le poți folosi la submit
         const result = await client.views.open({
             trigger_id: body.trigger_id,
             view: {
                 type: 'modal',
                 callback_id: 'quiz_submit',
-                private_metadata: JSON.stringify({ answer: quiz.answer }),
+                private_metadata: JSON.stringify({
+                    answer: quiz.answer,
+                    quiz_id: quiz.quiz_id   // <-- Acum îl trimitem
+                }),
                 title: { type: 'plain_text', text: 'BrainBuzz Quiz' },
                 submit: { type: 'plain_text', text: 'Submit' },
                 close: { type: 'plain_text', text: 'Cancel' },
@@ -277,8 +280,7 @@ app.action('start_quiz', async ({ ack, body, client }) => {
             }
         });
 
-        //  Timer de 15 secunde
-        // ⏱️ Timer de 15 secunde
+        // ✅ 3. Pornește timer-ul de 15 secunde
         const timeoutId = setTimeout(async () => {
             try {
                 await client.chat.postMessage({
@@ -309,34 +311,30 @@ app.action('start_quiz', async ({ ack, body, client }) => {
             }
         }, 15000);
 
-
         timeoutMap.set(userId, timeoutId);
-
 
     } catch (error) {
         console.error('Error fetching or displaying quiz:', error.message);
     }
 });
 
-
 // After the user submits the answer it gets checked
 app.view('quiz_submit', async ({ ack, body, view, client }) => {
     await ack();
-    //opreste timerul daca a primit rasp 
+
+    // ✅ Oprește timer-ul dacă userul a răspuns
     const timeoutId = timeoutMap.get(body.user.id);
     if (timeoutId) {
         clearTimeout(timeoutId);
         timeoutMap.delete(body.user.id);
     }
 
-
     const selected = view.state.values.quiz_answer_block.quiz_answer.selected_option.value;
-
     const metadata = JSON.parse(view.private_metadata);
     const correctAnswer = metadata.answer;
-
     const correct = selected === correctAnswer;
 
+    // ✅ Afișează rezultatul în Slack
     try {
         await client.chat.postMessage({
             channel: body.user.id,
@@ -347,8 +345,29 @@ app.view('quiz_submit', async ({ ack, body, view, client }) => {
     } catch (error) {
         console.error('Error sending quiz result: ', error);
     }
-});
 
+    // ✅ Trimite rezultatul către backend
+    try {
+        // Preia informații utile despre user
+        const userInfo = await client.users.info({ user: body.user.id });
+        const displayName = userInfo.user.profile.display_name;
+        const profilePic = userInfo.user.profile.image_512;
+
+        await axios.post('http://localhost:3000/answers', {
+            user_id: body.user.id,
+            quiz_id: metadata.quiz_id, // <-- UUID valid acum
+            correct: correct,
+            user_data: {
+                display_name: displayName,
+                profile_picture_url: profilePic
+            }
+        });
+
+        console.log('✅ Answer sent to backend successfully.');
+    } catch (error) {
+        console.error('❌ Failed to send answer to backend:', error.message);
+    }
+});
 
 // Listening for button clicks
 app.action('button_click', async ({ body, ack, say }) => {
