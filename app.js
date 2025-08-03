@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import axios from 'axios';
 const quizTypeMap = new Map();
 const timeoutMap = new Map();
+const userQuizMap = new Map();
 
 dotenv.config({ quiet: true });
 const { App } = pkg;
@@ -179,7 +180,18 @@ app.view('brainbuzz_modal', async ({ ack, body, view, client }) => {
 
     await ack(); // valid
 
-    quizTypeMap.set(body.user.id, quizType.value);
+    const typeMap = {
+        history: 'historical',
+        funny: 'icebreaker',
+        movie: 'movie_quote'
+    };
+
+    const backendType = typeMap[quizType.value];
+    const quizRes = await axios.post('http://localhost:3000/quiz', { type: backendType });
+    const quiz = quizRes.data;
+
+    // Salvezi quiz_id asociat cu userul
+    userQuizMap.set(body.user.id, quiz.quiz_id);
 
     const selectedChannel = view.state.values.channel_block.channel_select?.selected_conversation;
     let targetChannel = destination.value === 'private' ? body.user.id : selectedChannel || body.channel?.id;
@@ -215,23 +227,16 @@ app.action('start_quiz', async ({ ack, body, client }) => {
     await ack();
 
     const userId = body.user.id;
-    const selectedQuizType = quizTypeMap.get(userId);
-
-    const typeMap = {
-        history: 'historical',
-        funny: 'icebreaker',
-        movie: 'movie_quote'
-    };
-
-    const backendType = typeMap[selectedQuizType];
-    if (!backendType) {
-        console.error(`Invalid quiz type selected: ${selectedQuizType}`);
+    
+    const quizId = userQuizMap.get(userId);
+    if (!quizId) {
+        console.error(`No quiz_id found for user ${userId}`);
         return;
     }
 
     try {
         // ✅ 1. Ia quiz-ul din backend (care trebuie să conțină quiz_id)
-        const response = await axios.get(`http://localhost:3000/quiz?type=${backendType}`);
+        const response = await axios.get(`http://localhost:3000/quiz/${quizId}`);
         const quiz = response.data;
         console.log('🎯 Quiz primit de la backend:', quiz);
 
