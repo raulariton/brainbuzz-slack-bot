@@ -354,8 +354,9 @@ app.view('quiz_submit', async ({ ack, body, view, client }) => {
     // ✅ Trimite rezultatul către backend
     try {
         // Preia informații utile despre user
-        const displayName = body.user.name || 'unknown';
-        const profilePic = body.user.profile?.image_72 || '';
+        const userInfo = await client.users.info({ user: body.user.id });
+        const displayName = userInfo.user.profile.display_name;
+        const profilePic = userInfo.user.profile.image_512;
 
         await axios.post('http://localhost:3000/answers', {
             user_id: body.user.id,
