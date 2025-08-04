@@ -250,67 +250,46 @@ app.view('brainbuzz_modal', async ({ ack, body, view, client }) => {
 
 app.action('start_quiz', async ({ ack, body, client }) => {
     await ack();
-    try {
-        await client.chat.update({
-            channel: body.channel.id,
-            ts: body.message.ts,
-            text: 'Quiz in desfasurare...',
+
+    // 1. Deschide rapid un modal "loading"
+    const loadingModal = await client.views.open({
+        trigger_id: body.trigger_id,
+        view: {
+            type: 'modal',
+            callback_id: 'quiz_loading',
+            title: { type: 'plain_text', text: 'BrainBuzz Quiz' },
+            close: { type: 'plain_text', text: 'Cancel' },
             blocks: [
                 {
                     type: 'section',
-                    text: {
-                        type: 'mrkdwn',
-                        text: '*Quiz in desfasurare...*'
-                    }
+                    text: { type: 'mrkdwn', text: '⏳ Loading your quiz...' }
                 }
             ]
-        });
-    } catch (updateError) {
-        console.error('Error disabling Start Quiz button:', updateError);
-    }
+        }
+    });
+
+    // 2. Fetch quiz după ce modalul este deschis
     const userId = body.user.id;
     const config = quizConfigMap.get(userId);
-    if (!config) {
-        console.error(`No quiz config found for user ${userId}`);
-        return;
-    }
-    const { type: selectedQuizType, duration } = config;
-    const typeMap = {
-        history: 'historical',
-        funny: 'icebreaker',
-        movie: 'movie_quote'
-    };
-    const backendType = typeMap[selectedQuizType];
-    if (!backendType) {
-        console.error(`Invalid quiz type: ${selectedQuizType}`);
-        return;
-    }
+    const typeMap = { history: 'historical', funny: 'icebreaker', movie: 'movie_quote' };
+    const backendType = typeMap[config.type];
+
     try {
         const response = await axios.get(`http://localhost:3000/quiz?type=${backendType}`);
         const quiz = response.data;
-        const result = await client.views.open({
-            trigger_id: body.trigger_id,
+
+        // 3. Update modal cu quizul real
+        await client.views.update({
+            view_id: loadingModal.view.id,
+            hash: loadingModal.view.hash,
             view: {
                 type: 'modal',
                 callback_id: 'quiz_submit',
-                private_metadata: JSON.stringify({
-                    quiz_id: quiz.quiz_id,
-                    answer: quiz.answer
-                }),
+                private_metadata: JSON.stringify({ quiz_id: quiz.quiz_id, answer: quiz.answer }),
                 title: { type: 'plain_text', text: 'BrainBuzz Quiz' },
                 submit: { type: 'plain_text', text: 'Submit' },
                 close: { type: 'plain_text', text: 'Cancel' },
                 blocks: [
-                    {
-                        type: 'context',
-                        block_id: 'timer_block',
-                        elements: [
-                            {
-                                type: 'plain_text',
-                                text: `⏳ Quiz Time: ${duration} seconds`
-                            }
-                        ]
-                    },
                     {
                         type: 'section',
                         text: { type: 'mrkdwn', text: `*${quiz.quizText}*` }
@@ -331,35 +310,6 @@ app.action('start_quiz', async ({ ack, body, client }) => {
                 ]
             }
         });
-        const timeoutId = setTimeout(async () => {
-            try {
-                await client.chat.postMessage({
-                    channel: userId,
-                    text: '❌ Time is up! You didn’t answer in time.'
-                });
-                await client.views.update({
-                    view_id: result.view.id,
-                    hash: result.view.hash,
-                    view: {
-                        type: 'modal',
-                        title: { type: 'plain_text', text: 'Quiz expired' },
-                        close: { type: 'plain_text', text: 'Close' },
-                        blocks: [
-                            {
-                                type: 'section',
-                                text: {
-                                    type: 'plain_text',
-                                    text: "⏱️ Time's up! You didn't answer in time."
-                                }
-                            }
-                        ]
-                    }
-                });
-            } catch (err) {
-                console.error('Timeout handler error:', err);
-            }
-        }, duration * 1000);
-        timeoutMap.set(userId, timeoutId);
     } catch (error) {
         console.error('Error fetching or displaying quiz:', error);
     }
@@ -367,23 +317,23 @@ app.action('start_quiz', async ({ ack, body, client }) => {
 
 
 
-
 app.view('quiz_submit', async ({ ack, body, view, client }) => {
     await ack();
 
-
+    // 1️⃣ Oprire timer dacă există
     const timeoutId = timeoutMap.get(body.user.id);
     if (timeoutId) {
         clearTimeout(timeoutId);
         timeoutMap.delete(body.user.id);
     }
 
+    // 2️⃣ Preluare răspuns selectat și metadate
     const selected = view.state.values.quiz_answer_block.quiz_answer.selected_option.value;
     const metadata = JSON.parse(view.private_metadata);
     const correctAnswer = metadata.answer;
     const correct = selected === correctAnswer;
 
-
+    // 3️⃣ Trimite feedback către user în Slack
     try {
         await client.chat.postMessage({
             channel: body.user.id,
@@ -395,16 +345,23 @@ app.view('quiz_submit', async ({ ack, body, view, client }) => {
         console.error('Error sending quiz result: ', error);
     }
 
-
+    // 4️⃣ Preia informații despre utilizator cu fallback pentru display_name
     try {
-        // Preia informații utile despre user
         const userInfo = await client.users.info({ user: body.user.id });
-        const displayName = userInfo.user.profile.display_name;
+
+        const displayName =
+            userInfo.user.profile.display_name ||      // preferat
+            userInfo.user.profile.real_name ||         // fallback
+            userInfo.user.name;                        // ultim fallback (username Slack)
+
         const profilePic = userInfo.user.profile.image_512;
 
+        console.log('📌 Display name folosit:', displayName);
+
+        // 5️⃣ Trimite răspunsul către backend
         await axios.post('http://localhost:3000/answers', {
             user_id: body.user.id,
-            quiz_id: metadata.quiz_id, // <-- UUID valid acum
+            quiz_id: metadata.quiz_id,
             correct: correct,
             user_data: {
                 display_name: displayName,
