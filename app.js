@@ -1,7 +1,7 @@
 import pkg from '@slack/bolt';
 import dotenv from 'dotenv';
 import axios from 'axios';
-const quizTypeMap = new Map();
+const quizConfigMap = new Map();
 const timeoutMap = new Map();
 
 dotenv.config({ quiet: true });
@@ -133,7 +133,7 @@ app.command('/brainbuzz', async ({ ack, body, client }) => {
                         block_id: 'channel_block',
                         optional: true,
                         element: {
-                            type: 'conversations_select', // înlocuim static_select cu conversations_select
+                            type: 'conversations_select',
                             action_id: 'channel_select',
                             placeholder: {
                                 type: 'plain_text',
@@ -148,181 +148,230 @@ app.command('/brainbuzz', async ({ ack, body, client }) => {
                             type: 'plain_text',
                             text: 'Channel (if selected above)'
                         }
+                    },
+                    {
+                        type: 'input',
+                        block_id: 'quiz_duration_block',
+                        element: {
+                            type: 'static_select',
+                            action_id: 'quiz_duration',
+                            placeholder: {
+                                type: 'plain_text',
+                                text: 'Selectează durata quiz-ului'
+                            },
+                            options: [
+                                { text: { type: 'plain_text', text: '10 secunde' }, value: '10' },
+                                { text: { type: 'plain_text', text: '30 secunde' }, value: '30' },
+                                { text: { type: 'plain_text', text: '1 minut' }, value: '60' },
+                                { text: { type: 'plain_text', text: '5 minute' }, value: '300' },
+                                { text: { type: 'plain_text', text: '10 minute' }, value: '600' },
+                                { text: { type: 'plain_text', text: '30 minute' }, value: '1800' },
+                                { text: { type: 'plain_text', text: '1 ora' }, value: '3600' },
+                                { text: { type: 'plain_text', text: '2 ore' }, value: '7200' },
+                                { text: { type: 'plain_text', text: '4 ore' }, value: '14400' },
+                                { text: { type: 'plain_text', text: '8 ore' }, value: '28800' }
+                            ]
+                        },
+                        label: {
+                            type: 'plain_text',
+                            text: 'Quiz Duration'
+                        }
                     }
                 ]
             }
         });
     } catch (error) {
-        console.error(error);
+        console.error('Error opening BrainBuzz modal:', error);
     }
 });
 
-// After you press submit from the modal.
+
+
+
 app.view('brainbuzz_modal', async ({ ack, body, view, client }) => {
     const errors = {};
 
-    const quizType = view.state.values.quiz_type_block.quiz_type.selected_option;
-    const destination = view.state.values.destination_block.destination_select.selected_option;
 
-    if (!quizType) {
-        errors['quiz_type_block'] = 'You must select a quiz type.';
-    }
+    const quizTypeOpt = view.state.values.quiz_type_block.quiz_type.selected_option;
+    const destinationOpt = view.state.values.destination_block.destination_select.selected_option;
+    const durationOpt = view.state.values.quiz_duration_block.quiz_duration.selected_option;
 
-    if (!destination) {
-        errors['destination_block'] = 'You must select a destination.';
-    }
+
+    if (!quizTypeOpt) errors.quiz_type_block = 'You must select a quiz type.';
+    if (!destinationOpt) errors.destination_block = 'You must select a destination.';
+    if (!durationOpt) errors.quiz_duration_block = 'You must select a duration.';
 
     if (Object.keys(errors).length > 0) {
         await ack({ response_action: 'errors', errors });
         return;
     }
 
-    await ack(); // valid
+    await ack(); // input-urile sunt valide
 
-    quizTypeMap.set(body.user.id, quizType.value);
+
+    quizConfigMap.set(body.user.id, {
+        type: quizTypeOpt.value,
+        duration: Number(durationOpt.value)
+    });
+
 
     const selectedChannel = view.state.values.channel_block.channel_select?.selected_conversation;
-    let targetChannel = destination.value === 'private' ? body.user.id : selectedChannel || body.channel?.id;
+    const targetChannel = destinationOpt.value === 'private'
+        ? body.user.id
+        : (selectedChannel || body.channel?.id);
+
 
     try {
         await client.chat.postMessage({
             channel: targetChannel,
-            text: `BrainBuzz Quiz!`,
+            text: 'BrainBuzz Quiz!',
             blocks: [
                 {
-                    type: "section",
-                    text: { type: "mrkdwn", text: "*Ready for the quiz?*" }
+                    type: 'section',
+                    text: { type: 'mrkdwn', text: '*Ready for the quiz?*' }
                 },
                 {
-                    type: "actions",
+                    type: 'actions',
                     elements: [
                         {
-                            type: "button",
-                            text: { type: "plain_text", text: "Start Quiz" },
-                            action_id: "start_quiz"
+                            type: 'button',
+                            text: { type: 'plain_text', text: 'Start Quiz' },
+                            action_id: 'start_quiz'
                         }
                     ]
                 }
             ]
         });
     } catch (error) {
-        console.error('Error posting message: ', error);
+        console.error('Error posting Start Quiz message:', error);
     }
 });
 
-// When the button start_quiz is pressed
+
 app.action('start_quiz', async ({ ack, body, client }) => {
     await ack();
-
+    try {
+        await client.chat.update({
+            channel: body.channel.id,
+            ts: body.message.ts,
+            text: 'Quiz in desfasurare...',
+            blocks: [
+                {
+                    type: 'section',
+                    text: {
+                        type: 'mrkdwn',
+                        text: '*Quiz in desfasurare...*'
+                    }
+                }
+            ]
+        });
+    } catch (updateError) {
+        console.error('Error disabling Start Quiz button:', updateError);
+    }
     const userId = body.user.id;
-    const selectedQuizType = quizTypeMap.get(userId);
-
+    const config = quizConfigMap.get(userId);
+    if (!config) {
+        console.error(`No quiz config found for user ${userId}`);
+        return;
+    }
+    const { type: selectedQuizType, duration } = config;
     const typeMap = {
         history: 'historical',
         funny: 'icebreaker',
         movie: 'movie_quote'
     };
-
     const backendType = typeMap[selectedQuizType];
     if (!backendType) {
-        console.error(`Invalid quiz type selected: ${selectedQuizType}`);
+        console.error(`Invalid quiz type: ${selectedQuizType}`);
         return;
     }
-
     try {
-        // ✅ 1. Ia quiz-ul din backend (care trebuie să conțină quiz_id)
         const response = await axios.get(`http://localhost:3000/quiz?type=${backendType}`);
         const quiz = response.data;
-        console.log('🎯 Quiz primit de la backend:', quiz);
-
-        // ✅ 2. Salvează answer și quiz_id în metadata, ca să le poți folosi la submit
         const result = await client.views.open({
             trigger_id: body.trigger_id,
             view: {
                 type: 'modal',
                 callback_id: 'quiz_submit',
                 private_metadata: JSON.stringify({
-                    answer: quiz.answer,
-                    quiz_id: quiz.quiz_id   // <-- Acum îl trimitem
+                    quiz_id: quiz.quiz_id,
+                    answer: quiz.answer
                 }),
                 title: { type: 'plain_text', text: 'BrainBuzz Quiz' },
                 submit: { type: 'plain_text', text: 'Submit' },
                 close: { type: 'plain_text', text: 'Cancel' },
                 blocks: [
                     {
-                        type: "context",
-                        block_id: "timer_block",
+                        type: 'context',
+                        block_id: 'timer_block',
                         elements: [
                             {
-                                type: "plain_text",
-                                text: "⏳ Time remaining: 15 seconds"
+                                type: 'plain_text',
+                                text: `⏳ Quiz Time: ${duration} seconds`
                             }
                         ]
                     },
                     {
-                        type: "section",
-                        text: { type: "mrkdwn", text: `*${quiz.quizText}*` }
+                        type: 'section',
+                        text: { type: 'mrkdwn', text: `*${quiz.quizText}*` }
                     },
                     {
-                        type: "input",
-                        block_id: "quiz_answer_block",
-                        label: { type: "plain_text", text: "Choose your answer:" },
+                        type: 'input',
+                        block_id: 'quiz_answer_block',
+                        label: { type: 'plain_text', text: 'Choose your answer:' },
                         element: {
-                            type: "radio_buttons",
-                            action_id: "quiz_answer",
-                            options: quiz.options.map(option => ({
-                                text: { type: "plain_text", text: option },
-                                value: option
+                            type: 'radio_buttons',
+                            action_id: 'quiz_answer',
+                            options: quiz.options.map(opt => ({
+                                text: { type: 'plain_text', text: opt },
+                                value: opt
                             }))
                         }
                     }
                 ]
             }
         });
-
-        // ✅ 3. Pornește timer-ul de 15 secunde
         const timeoutId = setTimeout(async () => {
             try {
                 await client.chat.postMessage({
                     channel: userId,
-                    text: "❌ Failed to complete quiz in the given time.",
+                    text: '❌ Time is up! You didn’t answer in time.'
                 });
-
                 await client.views.update({
                     view_id: result.view.id,
                     hash: result.view.hash,
                     view: {
-                        type: "modal",
-                        title: { type: "plain_text", text: "Quiz expired" },
-                        close: { type: "plain_text", text: "Close" },
+                        type: 'modal',
+                        title: { type: 'plain_text', text: 'Quiz expired' },
+                        close: { type: 'plain_text', text: 'Close' },
                         blocks: [
                             {
-                                type: "section",
+                                type: 'section',
                                 text: {
-                                    type: "plain_text",
+                                    type: 'plain_text',
                                     text: "⏱️ Time's up! You didn't answer in time."
                                 }
                             }
                         ]
                     }
                 });
-            } catch (error) {
-                console.error("Timeout update error:", error);
+            } catch (err) {
+                console.error('Timeout handler error:', err);
             }
-        }, 15000);
-
+        }, duration * 1000);
         timeoutMap.set(userId, timeoutId);
-
     } catch (error) {
-        console.error('Error fetching or displaying quiz:', error.message);
+        console.error('Error fetching or displaying quiz:', error);
     }
 });
 
-// After the user submits the answer it gets checked
+
+
+
 app.view('quiz_submit', async ({ ack, body, view, client }) => {
     await ack();
 
-    // ✅ Oprește timer-ul dacă userul a răspuns
+
     const timeoutId = timeoutMap.get(body.user.id);
     if (timeoutId) {
         clearTimeout(timeoutId);
@@ -334,7 +383,7 @@ app.view('quiz_submit', async ({ ack, body, view, client }) => {
     const correctAnswer = metadata.answer;
     const correct = selected === correctAnswer;
 
-    // ✅ Afișează rezultatul în Slack
+
     try {
         await client.chat.postMessage({
             channel: body.user.id,
@@ -346,7 +395,7 @@ app.view('quiz_submit', async ({ ack, body, view, client }) => {
         console.error('Error sending quiz result: ', error);
     }
 
-    // ✅ Trimite rezultatul către backend
+
     try {
         // Preia informații utile despre user
         const userInfo = await client.users.info({ user: body.user.id });
@@ -369,13 +418,13 @@ app.view('quiz_submit', async ({ ack, body, view, client }) => {
     }
 });
 
-// Listening for button clicks
+
 app.action('button_click', async ({ body, ack, say }) => {
     await ack();
     await say(`Hey <@${body.user.id}>! You clicked the button!`);
 });
 
-// Bot start.
+
 (async () => {
     await app.start(process.env.PORT || 3000);
     app.logger.info('BrainBuzz is up and running!');
