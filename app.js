@@ -213,6 +213,20 @@ app.view('brainbuzz_modal', async ({ ack, body, view, client }) => {
         type: quizTypeOpt.value,
         duration: Number(durationOpt.value)
     });
+    try {
+        const typeMap = {
+            history: 'historical',
+            funny: 'icebreaker',
+            movie: 'movie_quote'
+        };
+        const backendType = typeMap[quizTypeOpt.value] || quizTypeOpt.value;
+        await axios.get(
+            `http://localhost:3000/quiz?type=${backendType}&duration=${durationOpt.value}`
+        );
+        console.log('✅ Quiz pre-generated successfully');
+    } catch (err) {
+        console.error('❌ Error pre-generating quiz:', err.message);
+    }
 
 
     const selectedChannel = view.state.values.channel_block.channel_select?.selected_conversation;
@@ -236,12 +250,17 @@ app.view('brainbuzz_modal', async ({ ack, body, view, client }) => {
                         {
                             type: 'button',
                             text: { type: 'plain_text', text: 'Start Quiz' },
-                            action_id: 'start_quiz'
+                            action_id: 'start_quiz',
+                            value: JSON.stringify({
+                                type: quizTypeOpt.value,
+                                duration: Number(durationOpt.value)
+                            })
                         }
                     ]
                 }
             ]
         });
+
     } catch (error) {
         console.error('Error posting Start Quiz message:', error);
     }
@@ -251,7 +270,7 @@ app.view('brainbuzz_modal', async ({ ack, body, view, client }) => {
 app.action('start_quiz', async ({ ack, body, client }) => {
     await ack();
 
-    // 1. Deschide rapid un modal "loading"
+    // 1. Deschide rapid modalul "loading"
     const loadingModal = await client.views.open({
         trigger_id: body.trigger_id,
         view: {
@@ -268,24 +287,34 @@ app.action('start_quiz', async ({ ack, body, client }) => {
         }
     });
 
-    // 2. Fetch quiz după ce modalul este deschis
-    const userId = body.user.id;
-    const config = quizConfigMap.get(userId);
-    const typeMap = { history: 'historical', funny: 'icebreaker', movie: 'movie_quote' };
-    const backendType = typeMap[config.type];
+    // 2. Extrage type și duration din buton
+    const { type, duration } = JSON.parse(body.actions[0].value);
+    const typeMap = {
+        history: 'historical',
+        funny: 'icebreaker',
+        movie: 'movie_quote'
+    };
+    const backendType = typeMap[type] || type;
 
+    // 3. Fetch quiz de la backend
     try {
-        const response = await axios.get(`http://localhost:3000/quiz?type=${backendType}`);
+        const response = await axios.get(
+            `http://localhost:3000/quiz?type=${backendType}&duration=${duration}`
+
+        );
         const quiz = response.data;
 
-        // 3. Update modal cu quizul real
+        // 4. Update modal cu quiz-ul real
         await client.views.update({
             view_id: loadingModal.view.id,
             hash: loadingModal.view.hash,
             view: {
                 type: 'modal',
                 callback_id: 'quiz_submit',
-                private_metadata: JSON.stringify({ quiz_id: quiz.quiz_id, answer: quiz.answer }),
+                private_metadata: JSON.stringify({
+                    quiz_id: quiz.quiz_id,
+                    answer: quiz.answer
+                }),
                 title: { type: 'plain_text', text: 'BrainBuzz Quiz' },
                 submit: { type: 'plain_text', text: 'Submit' },
                 close: { type: 'plain_text', text: 'Cancel' },
@@ -314,6 +343,7 @@ app.action('start_quiz', async ({ ack, body, client }) => {
         console.error('Error fetching or displaying quiz:', error);
     }
 });
+
 
 
 
