@@ -227,12 +227,40 @@ app.action('start_quiz', async ({ ack, body, client }) => {
     await ack();
 
     const userId = body.user.id;
-    
-    const quizId = userQuizMap.get(userId);
-    if (!quizId) {
-        console.error(`No quiz_id found for user ${userId}`);
+    const config = quizConfigMap.get(userId);
+    const typeMap = { history: 'historical', funny: 'icebreaker', movie: 'movie_quote' };
+    const backendType = typeMap[config.type];
+
+    try {
+        const checkRes = await axios.get(`http://localhost:3000/quiz/check?user_id=${userId}&quiz_type=${backendType}`);
+        if (checkRes.data.alreadyCompleted) {
+        await client.chat.postMessage({
+            channel: userId,
+            text: '⚠️ Ai completat deja un quiz de acest tip. Încearcă altul!'
+        });
         return;
+        }
+    } catch (error) {
+        console.error('Error checking if quiz already completed:', error);
     }
+
+    // 1. Deschide rapid un modal "loading"
+    const loadingModal = await client.views.open({
+        trigger_id: body.trigger_id,
+        view: {
+            type: 'modal',
+            callback_id: 'quiz_loading',
+            title: { type: 'plain_text', text: 'BrainBuzz Quiz' },
+            close: { type: 'plain_text', text: 'Cancel' },
+            blocks: [
+                {
+                    type: 'section',
+                    text: { type: 'mrkdwn', text: '⏳ Loading your quiz...' }
+                }
+            ]
+        }
+    });
+
 
     try {
         // ✅ 1. Ia quiz-ul din backend (care trebuie să conțină quiz_id)
