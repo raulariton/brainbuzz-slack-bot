@@ -1,10 +1,17 @@
-import pkg from '@slack/bolt';
 import dotenv from 'dotenv';
+dotenv.config({ quiet: true });
+
+import pkg from '@slack/bolt';
 import axios from 'axios';
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_KEY;
+const supabase = createClient(supabaseUrl, supabaseKey);
+
 const quizConfigMap = new Map();
 const timeoutMap = new Map();
 
-dotenv.config({ quiet: true });
 const { App } = pkg;
 
 const app = new App({
@@ -54,6 +61,27 @@ app.message('special', async ({ message, say }) => {
 app.command('/brainbuzz', async ({ ack, body, client }) => {
     await ack();
     try {
+        // 1. Verifică dacă există un quiz activ
+        const { data: activeQuiz, error } = await supabase
+            .from('quizzes')
+            .select('*')
+            .eq('is_active', true)
+            .single();
+
+        if (error && error.code !== 'PGRST116') { // PGRST116 = no rows found
+            console.error('Error checking active quiz:', error);
+            return;
+        }
+
+        // 2. Dacă există un quiz activ, trimite mesaj și nu deschide modalul
+        if (activeQuiz) {
+            await client.chat.postEphemeral({
+                channel: body.channel_id,
+                user: body.user_id,
+                text: '⚠️ Există deja un quiz activ! Așteaptă să expire înainte de a crea unul nou.'
+            });
+            return;
+        }
         await client.views.open({
             trigger_id: body.trigger_id,
             view: {
