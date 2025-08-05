@@ -22,41 +22,6 @@ const app = new App({
 });
 
 
-// Listen to incoming messages that contain "ceau"
-app.message('ceau', async ({ message, say }) => {
-    await say(`Ceau Sefule <@${message.user}>!`);
-});
-
-// Listen to incoming messages that contain "hello"
-app.message('hello', async ({ message, say }) => {
-    app.logger.info(`Received a message from user ${message.user}: ${message.text}`);
-    await say(`Hello <@${message.user}>!`);
-});
-
-// Listen to incoming messages that contain "special"
-app.message('special', async ({ message, say }) => {
-    await say({
-        blocks: [
-            {
-                "type": "actions",
-                "elements": [
-                    {
-                        "type": "button",
-                        "text": {
-                            "type": "plain_text",
-                            "text": "Click me!",
-                            "emoji": true
-                        },
-                        "value": "click_me_123",
-                        "action_id": "button_click"
-                    }
-                ],
-            }
-        ],
-        text: "Click the button below to interact with me!"
-    });
-});
-
 // Slash command for the quiz
 app.command('/brainbuzz', async ({ ack, body, client }) => {
     await ack();
@@ -458,9 +423,6 @@ app.view('quiz_submit', async ({ ack, body, view, client }) => {
 });
 
 
-app.action('button_click', async ({ body, ack, say }) => {
-    await ack();
-    await say(`Hey <@${body.user.id}>! You clicked the button!`);
 });
 
 
