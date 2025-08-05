@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import axios from 'axios';
 const quizConfigMap = new Map();
 const timeoutMap = new Map();
+const quizSessionMap = new Map();
 
 dotenv.config({ quiet: true });
 const { App } = pkg;
@@ -189,13 +190,11 @@ app.command('/brainbuzz', async ({ ack, body, client }) => {
 
 
 app.view('brainbuzz_modal', async ({ ack, body, view, client }) => {
+    // 1️⃣ Validări
     const errors = {};
-
-
     const quizTypeOpt = view.state.values.quiz_type_block.quiz_type.selected_option;
     const destinationOpt = view.state.values.destination_block.destination_select.selected_option;
     const durationOpt = view.state.values.quiz_duration_block.quiz_duration.selected_option;
-
 
     if (!quizTypeOpt) errors.quiz_type_block = 'You must select a quiz type.';
     if (!destinationOpt) errors.destination_block = 'You must select a destination.';
@@ -205,36 +204,36 @@ app.view('brainbuzz_modal', async ({ ack, body, view, client }) => {
         await ack({ response_action: 'errors', errors });
         return;
     }
+    await ack();
 
-    await ack(); // input-urile sunt valide
-
-
-    quizConfigMap.set(body.user.id, {
-        type: quizTypeOpt.value,
-        duration: Number(durationOpt.value)
-    });
-    try {
-        const typeMap = {
-            history: 'historical',
-            funny: 'icebreaker',
-            movie: 'movie_quote'
-        };
-        const backendType = typeMap[quizTypeOpt.value] || quizTypeOpt.value;
-        await axios.get(
-            `http://localhost:3000/quiz?type=${backendType}&duration=${durationOpt.value}`
-        );
-        console.log('✅ Quiz pre-generated successfully');
-    } catch (err) {
-        console.error('❌ Error pre-generating quiz:', err.message);
-    }
-
-
+    // 2️⃣ Extrage valorile alese
+    const quizType = quizTypeOpt.value;
+    const durationSec = Number(durationOpt.value);
+    const destination = destinationOpt.value;
     const selectedChannel = view.state.values.channel_block.channel_select?.selected_conversation;
-    const targetChannel = destinationOpt.value === 'private'
+    const targetChannel = destination === 'private'
         ? body.user.id
         : (selectedChannel || body.channel?.id);
 
+    // 3️⃣ Fetch quiz-ul de la backend
+    let quiz;
+    try {
+        const typeMap = { history: 'historical', funny: 'icebreaker', movie: 'movie_quote' };
+        const backendType = typeMap[quizType] || quizType;
+        const res = await axios.get(`http://localhost:3000/quiz?type=${backendType}&duration=${durationSec}`);
+        quiz = res.data; // { quiz_id, quizText, options, answer }
+    } catch (err) {
+        console.error('❌ Error fetching quiz:', err.message);
+        // opțional: trimite un mesaj de eroare user-ului
+        return;
+    }
 
+    // 4️⃣ Calculează endTime și stochează sesiunea
+    const now = Date.now();
+    const endTime = now + durationSec * 1000;
+    quizSessionMap.set(quiz.quiz_id, { quiz, endTime });
+
+    // 5️⃣ Trimite mesajul cu butonul “Start Quiz” (doar quiz_id în value)
     try {
         await client.chat.postMessage({
             channel: targetChannel,
@@ -251,18 +250,14 @@ app.view('brainbuzz_modal', async ({ ack, body, view, client }) => {
                             type: 'button',
                             text: { type: 'plain_text', text: 'Start Quiz' },
                             action_id: 'start_quiz',
-                            value: JSON.stringify({
-                                type: quizTypeOpt.value,
-                                duration: Number(durationOpt.value)
-                            })
+                            value: quiz.quiz_id
                         }
                     ]
                 }
             ]
         });
-
     } catch (error) {
-        console.error('Error posting Start Quiz message:', error);
+        console.error('❌ Error posting Start Quiz message:', error);
     }
 });
 
@@ -270,100 +265,166 @@ app.view('brainbuzz_modal', async ({ ack, body, view, client }) => {
 app.action('start_quiz', async ({ ack, body, client }) => {
     await ack();
 
-    // 1. Deschide rapid modalul "loading"
-    const loadingModal = await client.views.open({
-        trigger_id: body.trigger_id,
-        view: {
-            type: 'modal',
-            callback_id: 'quiz_loading',
-            title: { type: 'plain_text', text: 'BrainBuzz Quiz' },
-            close: { type: 'plain_text', text: 'Cancel' },
-            blocks: [
-                {
-                    type: 'section',
-                    text: { type: 'mrkdwn', text: '⏳ Loading your quiz...' }
-                }
-            ]
-        }
-    });
+    // 1️⃣ Extrage quiz_id
+    const quizId = body.actions[0].value;
+    const session = quizSessionMap.get(quizId);
 
-    // 2. Extrage type și duration din buton
-    const { type, duration } = JSON.parse(body.actions[0].value);
-    const typeMap = {
-        history: 'historical',
-        funny: 'icebreaker',
-        movie: 'movie_quote'
-    };
-    const backendType = typeMap[type] || type;
-
-    // 3. Fetch quiz de la backend
-    try {
-        const response = await axios.get(
-            `http://localhost:3000/quiz?type=${backendType}&duration=${duration}`
-
-        );
-        const quiz = response.data;
-
-        // 4. Update modal cu quiz-ul real
-        await client.views.update({
-            view_id: loadingModal.view.id,
-            hash: loadingModal.view.hash,
+    if (!session) {
+        // sesiună inexistentă sau deja expirată
+        return await client.views.open({
+            trigger_id: body.trigger_id,
             view: {
                 type: 'modal',
-                callback_id: 'quiz_submit',
-                private_metadata: JSON.stringify({
-                    quiz_id: quiz.quiz_id,
-                    answer: quiz.answer
-                }),
                 title: { type: 'plain_text', text: 'BrainBuzz Quiz' },
-                submit: { type: 'plain_text', text: 'Submit' },
-                close: { type: 'plain_text', text: 'Cancel' },
+                close: { type: 'plain_text', text: 'Close' },
                 blocks: [
                     {
                         type: 'section',
-                        text: { type: 'mrkdwn', text: `*${quiz.quizText}*` }
-                    },
-                    {
-                        type: 'input',
-                        block_id: 'quiz_answer_block',
-                        label: { type: 'plain_text', text: 'Choose your answer:' },
-                        element: {
-                            type: 'radio_buttons',
-                            action_id: 'quiz_answer',
-                            options: quiz.options.map(opt => ({
-                                text: { type: 'plain_text', text: opt },
-                                value: opt
-                            }))
+                        text: {
+                            type: 'mrkdwn',
+                            text: ':warning: This quiz is no longer active.'
                         }
                     }
                 ]
             }
         });
-    } catch (error) {
-        console.error('Error fetching or displaying quiz:', error);
     }
+
+    const { quiz, endTime } = session;
+    const now = Date.now();
+    const remainingMs = endTime - now;
+
+    // 2️⃣ Dacă timpul a expirat deja
+    if (remainingMs <= 0) {
+        return await client.views.open({
+            trigger_id: body.trigger_id,
+            view: {
+                type: 'modal',
+                title: { type: 'plain_text', text: 'BrainBuzz Quiz' },
+                close: { type: 'plain_text', text: 'Close' },
+                blocks: [
+                    {
+                        type: 'section',
+                        text: {
+                            type: 'mrkdwn',
+                            text: ':x: _Failed to complete quiz in the given time._'
+                        }
+                    }
+                ]
+            }
+        });
+    }
+
+    // 3️⃣ Formatează ora de expirare
+    const expires = new Date(endTime).toLocaleTimeString('ro-RO', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+    });
+
+    // 4️⃣ Deschide modalul cu întrebarea și context
+    const modal = await client.views.open({
+        trigger_id: body.trigger_id,
+        view: {
+            type: 'modal',
+            callback_id: 'quiz_submit',
+            private_metadata: quizId,
+            title: { type: 'plain_text', text: 'BrainBuzz Quiz' },
+            submit: { type: 'plain_text', text: 'Submit' },
+            close: { type: 'plain_text', text: 'Cancel' },
+            blocks: [
+                {
+                    type: 'context',
+                    elements: [
+                        { type: 'mrkdwn', text: `*This quiz is active until ${expires}*` }
+                    ]
+                },
+                {
+                    type: 'section',
+                    text: { type: 'mrkdwn', text: `*${quiz.quizText}*` }
+                },
+                {
+                    type: 'input',
+                    block_id: 'quiz_answer_block',
+                    label: { type: 'plain_text', text: 'Choose your answer:' },
+                    element: {
+                        type: 'radio_buttons',
+                        action_id: 'quiz_answer',
+                        options: quiz.options.map(opt => ({
+                            text: { type: 'plain_text', text: opt },
+                            value: opt
+                        }))
+                    }
+                }
+            ]
+        }
+    });
+
+    // 5️⃣ Pornește timeout-ul global
+    const viewId = modal.view.id;
+    const timeoutId = setTimeout(async () => {
+        try {
+            await client.views.update({
+                view_id: viewId,
+                view: {
+                    type: 'modal',
+                    title: { type: 'plain_text', text: 'BrainBuzz Quiz' },
+                    close: { type: 'plain_text', text: 'Close' },
+                    blocks: [
+                        {
+                            type: 'section',
+                            text: {
+                                type: 'mrkdwn',
+                                text: ':x: _Failed to complete quiz in the given time._'
+                            }
+                        }
+                    ]
+                }
+            });
+        } catch (err) {
+            console.error('Error closing quiz on timeout:', err);
+        }
+        timeoutMap.delete(viewId);
+    }, remainingMs);
+
+    timeoutMap.set(viewId, timeoutId);
 });
 
 
 
 
+
 app.view('quiz_submit', async ({ ack, body, view, client }) => {
+    // Acknowledge the submission
     await ack();
 
-    // 1️⃣ Oprire timer dacă există
-    const timeoutId = timeoutMap.get(body.user.id);
+    // 1️⃣ Anulează timer-ul dacă există
+    const timeoutId = timeoutMap.get(view.id);
     if (timeoutId) {
         clearTimeout(timeoutId);
-        timeoutMap.delete(body.user.id);
+        timeoutMap.delete(view.id);
     }
 
-    // 2️⃣ Preluare răspuns selectat și metadate
+    // 2️⃣ Extrage quiz_id din private_metadata și sesiunea asociată
+    const quizId = view.private_metadata;
+    const session = quizSessionMap.get(quizId);
+    if (!session) {
+        // Sesiune inexistentă sau expirat
+        await client.chat.postMessage({
+            channel: body.user.id,
+            text: ':warning: This quiz is no longer active.'
+        });
+        return;
+    }
+
+    const { quiz } = session;
+    const correctAnswer = quiz.answer;
+
+    // 3️⃣ Preia răspunsul utilizatorului
     const selected = view.state.values.quiz_answer_block.quiz_answer.selected_option.value;
-    const metadata = JSON.parse(view.private_metadata);
-    const correctAnswer = metadata.answer;
     const correct = selected === correctAnswer;
 
-    // 3️⃣ Trimite feedback către user în Slack
+    // 4️⃣ Trimite feedback către user
     try {
         await client.chat.postMessage({
             channel: body.user.id,
@@ -371,38 +432,35 @@ app.view('quiz_submit', async ({ ack, body, view, client }) => {
                 ? `✅ Correct! The answer is *${correctAnswer}*.`
                 : `❌ Wrong! You selected *${selected}*, but the correct answer was *${correctAnswer}*.`
         });
-    } catch (error) {
-        console.error('Error sending quiz result: ', error);
+    } catch (err) {
+        console.error('Error sending feedback to user:', err);
     }
 
-    // 4️⃣ Preia informații despre utilizator cu fallback pentru display_name
+    // 5️⃣ Trimite răspunsul către backend
     try {
         const userInfo = await client.users.info({ user: body.user.id });
-
         const displayName =
-            userInfo.user.profile.display_name ||      // preferat
-            userInfo.user.profile.real_name ||         // fallback
-            userInfo.user.name;                        // ultim fallback (username Slack)
-
+            userInfo.user.profile.display_name ||
+            userInfo.user.profile.real_name ||
+            userInfo.user.name;
         const profilePic = userInfo.user.profile.image_512;
 
-        console.log('📌 Display name folosit:', displayName);
-
-        // 5️⃣ Trimite răspunsul către backend
         await axios.post('http://localhost:3000/answers', {
             user_id: body.user.id,
-            quiz_id: metadata.quiz_id,
+            quiz_id: quizId,
             correct: correct,
             user_data: {
                 display_name: displayName,
                 profile_picture_url: profilePic
             }
         });
-
         console.log('✅ Answer sent to backend successfully.');
-    } catch (error) {
-        console.error('❌ Failed to send answer to backend:', error.message);
+    } catch (err) {
+        console.error('❌ Failed to send answer to backend:', err.message);
     }
+
+    // 6️⃣ Cleanup: șterge sesiunea dacă nu va fi folosită din nou
+    quizSessionMap.delete(quizId);
 });
 
 
