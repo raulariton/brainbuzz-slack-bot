@@ -1,5 +1,5 @@
 import dotenv from 'dotenv';
-import { sendImageToUser, getUserProfilePicture } from './sendImageToUser.js';
+import { sendRewardToUser, getUserProfilePicture } from './sendRewardToUser.js';
 
 dotenv.config();
 
@@ -20,7 +20,7 @@ const test = async () => {
   for (const user of top3) {
     const imageUrl = await getUserProfilePicture(user.userId);
     if (imageUrl) {
-      await sendImageToUser(user.userId, imageUrl, messages[user.place]);
+      await sendRewardToUser(user.userId, imageUrl, messages[user.place]);
     } else {
       console.log(`❌ Nu s-a putut obține poza pentru userId: ${user.userId}`);
     }

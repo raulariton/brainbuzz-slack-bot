@@ -4,13 +4,12 @@ dotenv.config({ quiet: true });
 import pkg from '@slack/bolt';
 import axios from 'axios';
 import { createClient } from '@supabase/supabase-js';
+import {handleQuizTimeout} from "./handleQuizTimeout.js";
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-const quizConfigMap = new Map();
-const timeoutMap = new Map();
 const quizSessionMap = new Map();
 
 const { App } = pkg;
@@ -261,6 +260,10 @@ app.view('brainbuzz_modal', async ({ ack, body, view, client }) => {
     const endTime = now + durationSec * 1000;
     quizSessionMap.set(quiz.quiz_id, { quiz, endTime });
 
+    // start timeout
+    // NOTE: do not use `await` since it will block the event loop
+    handleQuizTimeout(quiz.quiz_id, endTime, app, quizSessionMap);
+
     // 5️⃣ Trimite mesajul cu butonul “Start Quiz” (doar quiz_id în value)
     try {
         await client.chat.postMessage({
@@ -388,34 +391,6 @@ app.action('start_quiz', async ({ ack, body, client }) => {
         }
     });
 
-    // 5️⃣ Pornește timeout-ul global
-    const viewId = modal.view.id;
-    const timeoutId = setTimeout(async () => {
-        try {
-            await client.views.update({
-                view_id: viewId,
-                view: {
-                    type: 'modal',
-                    title: { type: 'plain_text', text: 'BrainBuzz Quiz' },
-                    close: { type: 'plain_text', text: 'Close' },
-                    blocks: [
-                        {
-                            type: 'section',
-                            text: {
-                                type: 'mrkdwn',
-                                text: ':x: _Failed to complete quiz in the given time._'
-                            }
-                        }
-                    ]
-                }
-            });
-        } catch (err) {
-            console.error('Error closing quiz on timeout:', err);
-        }
-        timeoutMap.delete(viewId);
-    }, remainingMs);
-
-    timeoutMap.set(viewId, timeoutId);
 });
 
 
@@ -425,13 +400,6 @@ app.action('start_quiz', async ({ ack, body, client }) => {
 app.view('quiz_submit', async ({ ack, body, view, client }) => {
     // Acknowledge the submission
     await ack();
-
-    // 1️⃣ Anulează timer-ul dacă există
-    const timeoutId = timeoutMap.get(view.id);
-    if (timeoutId) {
-        clearTimeout(timeoutId);
-        timeoutMap.delete(view.id);
-    }
 
     // 2️⃣ Extrage quiz_id din private_metadata și sesiunea asociată
     const quizId = view.private_metadata;
@@ -486,9 +454,7 @@ app.view('quiz_submit', async ({ ack, body, view, client }) => {
     } catch (err) {
         console.error('❌ Failed to send answer to backend:', err.message);
     }
-
-    // 6️⃣ Cleanup: șterge sesiunea dacă nu va fi folosită din nou
-    quizSessionMap.delete(quizId);
+    
 });
 
 
