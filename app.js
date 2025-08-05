@@ -43,7 +43,7 @@ app.command('/brainbuzz', async ({ ack, body, client }) => {
             await client.chat.postEphemeral({
                 channel: body.channel_id,
                 user: body.user_id,
-                text: '⚠️ Există deja un quiz activ! Așteaptă să expire înainte de a crea unul nou.'
+                text: ':warning: There is already an active quiz!.'
             });
             return;
         }
@@ -150,19 +150,19 @@ app.command('/brainbuzz', async ({ ack, body, client }) => {
                             action_id: 'quiz_duration',
                             placeholder: {
                                 type: 'plain_text',
-                                text: 'Selectează durata quiz-ului'
+                                text: 'Select the duration of the quiz'
                             },
                             options: [
-                                { text: { type: 'plain_text', text: '10 secunde' }, value: '10' },
-                                { text: { type: 'plain_text', text: '30 secunde' }, value: '30' },
-                                { text: { type: 'plain_text', text: '1 minut' }, value: '60' },
-                                { text: { type: 'plain_text', text: '5 minute' }, value: '300' },
-                                { text: { type: 'plain_text', text: '10 minute' }, value: '600' },
-                                { text: { type: 'plain_text', text: '30 minute' }, value: '1800' },
-                                { text: { type: 'plain_text', text: '1 ora' }, value: '3600' },
-                                { text: { type: 'plain_text', text: '2 ore' }, value: '7200' },
-                                { text: { type: 'plain_text', text: '4 ore' }, value: '14400' },
-                                { text: { type: 'plain_text', text: '8 ore' }, value: '28800' }
+                                { text: { type: 'plain_text', text: '10 seconds' }, value: '10' },
+                                { text: { type: 'plain_text', text: '30 seconds' }, value: '30' },
+                                { text: { type: 'plain_text', text: '1 minute' }, value: '60' },
+                                { text: { type: 'plain_text', text: '5 minutes' }, value: '300' },
+                                { text: { type: 'plain_text', text: '10 minutes' }, value: '600' },
+                                { text: { type: 'plain_text', text: '30 minutes' }, value: '1800' },
+                                { text: { type: 'plain_text', text: '1 hour' }, value: '3600' },
+                                { text: { type: 'plain_text', text: '2 hours' }, value: '7200' },
+                                { text: { type: 'plain_text', text: '4 hours' }, value: '14400' },
+                                { text: { type: 'plain_text', text: '8 hours' }, value: '28800' }
                             ]
                         },
                         label: {
@@ -436,8 +436,8 @@ app.view('quiz_submit', async ({ ack, body, view, client }) => {
             }
         });
         console.log('✅ Answer sent to backend successfully.');
-    } catch (err) {
-        console.error('❌ Failed to send answer to backend:', err.message);
+    } catch (error) {
+        console.error('❌ Failed to send answer to backend:', error.message);
     }
 
     // update session with user answer
