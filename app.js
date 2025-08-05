@@ -223,7 +223,7 @@ app.view('brainbuzz_modal', async ({ ack, body, view, client }) => {
     // 4️⃣ Calculează endTime și stochează sesiunea
     const now = Date.now();
     const endTime = now + durationSec * 1000;
-    quizSessionMap.set(quiz.quiz_id, { quiz, endTime });
+    quizSessionMap.set(quiz.quiz_id, { quiz, endTime, usersAnswered: [] });
 
     // start timeout
     // NOTE: do not use `await` since it will block the event loop
@@ -284,6 +284,15 @@ app.action('start_quiz', async ({ ack, body, client }) => {
                 ]
             }
         });
+    }
+
+    // if user already answered the quiz, do not open modal
+    if (session.usersAnswered?.includes(body.user.id)) {
+      return await client.chat.postEphemeral({
+          channel: body.channel.id,
+          user: body.user.id,
+          text: ':warning: You have already answered this quiz! You can\'t answer twice!'
+      });
     }
 
     const { quiz, endTime } = session;
@@ -378,6 +387,17 @@ app.view('quiz_submit', async ({ ack, body, view, client }) => {
         return;
     }
 
+
+    // check if user already answered the quiz
+    if (session.usersAnswered?.includes(body.user.id)) {
+        await client.chat.postEphemeral({
+          channel: body.channel.id,
+          user: body.user.id,
+          text: ':warning: You have already answered this quiz! You can\'t answer twice!\n(ERROR: user already answered, but modal still opened).'
+        });
+        return;
+    }
+
     const { quiz } = session;
     const correctAnswer = quiz.answer;
 
@@ -419,9 +439,10 @@ app.view('quiz_submit', async ({ ack, body, view, client }) => {
     } catch (err) {
         console.error('❌ Failed to send answer to backend:', err.message);
     }
-    
-});
 
+    // update session with user answer
+    session.usersAnswered.push(body.user.id);
+    console.log("Updated session with user answer:", session.usersAnswered);
 
 });
 
