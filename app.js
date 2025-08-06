@@ -51,6 +51,7 @@ app.command('/brainbuzz', async ({ ack, body, client }) => {
             view: {
                 type: 'modal',
                 callback_id: 'brainbuzz_modal',
+                private_metadata: JSON.stringify({ originChannel: body.channel_id }),
                 title: {
                     type: 'plain_text',
                     text: 'BrainBuzz Quiz'
@@ -184,202 +185,214 @@ app.command('/brainbuzz', async ({ ack, body, client }) => {
 });
 
 app.view('brainbuzz_modal', async ({ ack, body, view, client }) => {
-    // 1️⃣ Validări
-    const errors = {};
-    const quizTypeOpt = view.state.values.quiz_type_block.quiz_type.selected_option;
-    const destinationOpt = view.state.values.destination_block.destination_select.selected_option;
-    const durationOpt = view.state.values.quiz_duration_block.quiz_duration.selected_option;
-
-    if (!quizTypeOpt) errors.quiz_type_block = 'You must select a quiz type.';
-    if (!destinationOpt) errors.destination_block = 'You must select a destination.';
-    if (!durationOpt) errors.quiz_duration_block = 'You must select a duration.';
-
-    if (Object.keys(errors).length > 0) {
-        await ack({ response_action: 'errors', errors });
-        return;
-    }
-    await ack();
-
-    // 2️⃣ Extrage valorile alese
-    const quizType = quizTypeOpt.value;
-    const durationSec = Number(durationOpt.value);
-    const destination = destinationOpt.value;
-    const selectedChannel = view.state.values.channel_block.channel_select?.selected_conversation;
-    const targetChannel =
-        destination === 'private' ? body.user.id : (selectedChannel || body.channel?.id);
-
-    // 3️⃣ Fetch quiz-ul de la backend
-    let quiz;
     try {
-        const typeMap = { history: 'historical', funny: 'icebreaker', movie: 'movie_quote' };
-        const backendType = typeMap[quizType] || quizType;
-        const res = await axios.get(
-            `http://localhost:3000/quiz?type=${backendType}&duration=${durationSec}`
-        );
-        quiz = res.data; // { quiz_id, quizText, options, answer, imageUrl }
-    } catch (err) {
-        console.error('❌ Error fetching quiz:', err.message);
-        // opțional: trimite un mesaj de eroare user-ului
-        return;
-    }
+        await ack();
+        // 1️⃣ Validări
+        const metadata = view.private_metadata ? JSON.parse(view.private_metadata) : {};
+        const originChannel = metadata.originChannel;
+        const errors = {};
+        const quizTypeOpt = view.state.values.quiz_type_block.quiz_type.selected_option;
+        const destinationOpt =
+            view.state.values.destination_block.destination_select.selected_option;
+        const durationOpt = view.state.values.quiz_duration_block.quiz_duration.selected_option;
 
-    // 4️⃣ Calculează endTime și stochează sesiunea
-    const now = Date.now();
-    const endTime = now + durationSec * 1000;
-    quizSessionMap.set(quiz.quiz_id, { quiz, endTime, usersAnswered: [] });
+        if (!quizTypeOpt) errors.quiz_type_block = 'You must select a quiz type.';
+        if (!destinationOpt) errors.destination_block = 'You must select a destination.';
+        if (!durationOpt) errors.quiz_duration_block = 'You must select a duration.';
 
-    // start timeout
-    // NOTE: do not use `await` since it will block the event loop
-    handleQuizTimeout(quiz.quiz_id, endTime, app, quizSessionMap);
+        if (Object.keys(errors).length > 0) {
+            await ack({ response_action: 'errors', errors });
+            return;
+        }
 
-    // 5️⃣ Trimite mesajul cu butonul “Start Quiz” (doar quiz_id în value)
-    const typeNameMap = {
-        history: 'Historical',
-        funny: 'Funny/Icebreaker',
-        movie: 'Popular quote'
-    }
+        // 2️⃣ Extrage valorile alese
+        const quizType = quizTypeOpt.value;
+        const durationSec = Number(durationOpt.value);
+        const destination = destinationOpt.value;
+        const selectedChannel =
+            view.state.values.channel_block.channel_select?.selected_conversation;
+        const targetChannel =
+            destination === 'private' ? body.user.id : selectedChannel || originChannel;
 
-    try {
-        await client.chat.postMessage({
-            channel: targetChannel,
-            text: 'BrainBuzz Quiz!',
-            blocks: [
-                {
-                    type: 'section',
-                    text: {
-                        type: 'mrkdwn',
-                        text: `@${body.user.name} has started a new ${typeNameMap[quizType].toLowerCase()} quiz!\nClick the "Start Quiz" button below to give it a try.`
+        // 3️⃣ Fetch quiz-ul de la backend
+        let quiz;
+        try {
+            const typeMap = { history: 'historical', funny: 'icebreaker', movie: 'movie_quote' };
+            const backendType = typeMap[quizType] || quizType;
+            const res = await axios.get(
+                `http://localhost:3000/quiz?type=${backendType}&duration=${durationSec}`
+            );
+            quiz = res.data; // { quiz_id, quizText, options, answer, imageUrl }
+        } catch (err) {
+            console.error('❌ Error fetching quiz:', err.message);
+            // opțional: trimite un mesaj de eroare user-ului
+            return;
+        }
+
+        // 4️⃣ Calculează endTime și stochează sesiunea
+        const now = Date.now();
+        const endTime = now + durationSec * 1000;
+        quizSessionMap.set(quiz.quiz_id, { quiz, endTime, usersAnswered: [] });
+
+        // start timeout
+        // NOTE: do not use `await` since it will block the event loop
+        handleQuizTimeout(quiz.quiz_id, endTime, app, quizSessionMap);
+
+        // 5️⃣ Trimite mesajul cu butonul “Start Quiz” (doar quiz_id în value)
+        const typeNameMap = {
+            history: 'Historical',
+            funny: 'Funny/Icebreaker',
+            movie: 'Popular quote'
+        }
+
+        try {
+            await client.chat.postMessage({
+                channel: targetChannel,
+                text: 'BrainBuzz Quiz!',
+                blocks: [
+                    {
+                        type: 'section',
+                        text: {
+                            type: 'mrkdwn',
+                            text: `@${body.user.name} has started a new ${typeNameMap[quizType].toLowerCase()} quiz!\nClick the "Start Quiz" button below to give it a try.`
+                        },
                     },
-                },
-                {
-                    type: 'actions',
-                    elements: [
-                        {
-                            type: 'button',
-                            text: { type: 'plain_text', text: 'Start Quiz' },
-                            action_id: 'start_quiz',
-                            value: quiz.quiz_id
-                        }
-                    ]
-                },
-                {
-                    type: 'image',
-                    image_url: quiz.imageUrl,
-                    alt_text: 'Quiz Image'
-                }
-            ]
-        });
-    } catch (error) {
-        console.error('❌ Error posting Start Quiz message:', error);
+                    {
+                        type: 'actions',
+                        elements: [
+                            {
+                                type: 'button',
+                                text: { type: 'plain_text', text: 'Start Quiz' },
+                                action_id: 'start_quiz',
+                                value: quiz.quiz_id
+                            }
+                        ]
+                    },
+                    {
+                        type: 'image',
+                        image_url: quiz.imageUrl,
+                        alt_text: 'Quiz Image'
+                    }
+                ]
+            });
+        } catch (error) {
+            console.error('❌ Error posting Start Quiz message:', error);
+        }
+    } catch (err) {
+        console.error(err);
     }
 });
 
 app.action('start_quiz', async ({ ack, body, client }) => {
     await ack();
 
-    // 1️⃣ Extrage quiz_id
-    const quizId = body.actions[0].value;
-    const session = quizSessionMap.get(quizId);
+    try {
+        // 1️⃣ Extrage quiz_id
+        const quizId = body.actions[0].value;
+        const session = quizSessionMap.get(quizId);
 
-    if (!session) {
-        // sesiună inexistentă sau deja expirată
-        return await client.views.open({
-            trigger_id: body.trigger_id,
-            view: {
-                type: 'modal',
-                title: { type: 'plain_text', text: 'BrainBuzz Quiz' },
-                close: { type: 'plain_text', text: 'Close' },
-                blocks: [
-                    {
-                        type: 'section',
-                        text: {
-                            type: 'mrkdwn',
-                            text: ":warning: This quiz is no longer active."
+        if (!session) {
+            // sesiună inexistentă sau deja expirată
+            return await client.views.open({
+                trigger_id: body.trigger_id,
+                view: {
+                    type: 'modal',
+                    title: { type: 'plain_text', text: 'BrainBuzz Quiz' },
+                    close: { type: 'plain_text', text: 'Close' },
+                    blocks: [
+                        {
+                            type: 'section',
+                            text: {
+                                type: 'mrkdwn',
+                                text: ":warning: This quiz is no longer active."
+                            }
                         }
-                    }
-                ]
-            }
-        });
-    }
-
-    // if user already answered the quiz, do not open modal
-    if (session.usersAnswered?.includes(body.user.id)) {
-        return await client.chat.postEphemeral({
-            channel: body.channel.id,
-            user: body.user.id,
-            text: ":warning: You have already answered this quiz! You can't answer twice!"
-        });
-    }
-
-    const { quiz, endTime } = session;
-    const now = Date.now();
-    const remainingMs = endTime - now;
-
-    // 2️⃣ Dacă timpul a expirat deja
-    if (remainingMs <= 0) {
-        return await client.views.open({
-            trigger_id: body.trigger_id,
-            view: {
-                type: 'modal',
-                title: { type: 'plain_text', text: 'BrainBuzz Quiz' },
-                close: { type: 'plain_text', text: 'Close' },
-                blocks: [
-                    {
-                        type: 'section',
-                        text: {
-                            type: 'mrkdwn',
-                            text: ':x: _Failed to complete quiz in the given time._'
-                        }
-                    }
-                ]
-            }
-        });
-    }
-
-    // 3️⃣ Formatează ora de expirare
-    const expires = new Date(endTime).toLocaleTimeString('ro-RO', {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false
-    });
-
-    // 4️⃣ Deschide modalul cu întrebarea și context
-    const modal = await client.views.open({
-        trigger_id: body.trigger_id,
-        view: {
-            type: 'modal',
-            callback_id: 'quiz_submit',
-            private_metadata: quizId,
-            title: { type: 'plain_text', text: 'BrainBuzz Quiz' },
-            submit: { type: 'plain_text', text: 'Submit' },
-            close: { type: 'plain_text', text: 'Cancel' },
-            blocks: [
-                {
-                    type: 'context',
-                    elements: [
-                        { type: 'mrkdwn', text: `*This quiz is active until ${expires}*` }
                     ]
-                },
-                {
-                    type: 'section',
-                    text: { type: 'mrkdwn', text: `*${quiz.quizText}*` }
-                },
-                {
-                    type: 'input',
-                    block_id: 'quiz_answer_block',
-                    label: { type: 'plain_text', text: 'Choose your answer:' },
-                    element: {
-                        type: 'radio_buttons',
-                        action_id: 'quiz_answer',
-                        options: quiz.options.map((opt) => ({
-                            text: { type: 'plain_text', text: opt },
-                            value: opt
-                        }))
-                    }
                 }
-            ]
+            });
         }
-    });
+
+        // if user already answered the quiz, do not open modal
+        if (session.usersAnswered?.includes(body.user.id)) {
+            return await client.chat.postEphemeral({
+                channel: body.channel.id,
+                user: body.user.id,
+                text: ":warning: You have already answered this quiz! You can't answer twice!"
+            });
+        }
+
+        const { quiz, endTime } = session;
+        const now = Date.now();
+        const remainingMs = endTime - now;
+
+        // 2️⃣ Dacă timpul a expirat deja
+        if (remainingMs <= 0) {
+            return await client.views.open({
+                trigger_id: body.trigger_id,
+                view: {
+                    type: 'modal',
+                    title: { type: 'plain_text', text: 'BrainBuzz Quiz' },
+                    close: { type: 'plain_text', text: 'Close' },
+                    blocks: [
+                        {
+                            type: 'section',
+                            text: {
+                                type: 'mrkdwn',
+                                text: ':x: _Failed to complete quiz in the given time._'
+                            }
+                        }
+                    ]
+                }
+            });
+        }
+
+        // 3️⃣ Formatează ora de expirare
+        const expires = new Date(endTime).toLocaleTimeString('ro-RO', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+        });
+
+        // 4️⃣ Deschide modalul cu întrebarea și context
+        const modal = await client.views.open({
+            trigger_id: body.trigger_id,
+            view: {
+                type: 'modal',
+                callback_id: 'quiz_submit',
+                private_metadata: quizId,
+                title: { type: 'plain_text', text: 'BrainBuzz Quiz' },
+                submit: { type: 'plain_text', text: 'Submit' },
+                close: { type: 'plain_text', text: 'Cancel' },
+                blocks: [
+                    {
+                        type: 'context',
+                        elements: [
+                            { type: 'mrkdwn', text: `*This quiz is active until ${expires}*` }
+                        ]
+                    },
+                    {
+                        type: 'section',
+                        text: { type: 'mrkdwn', text: `*${quiz.quizText}*` }
+                    },
+                    {
+                        type: 'input',
+                        block_id: 'quiz_answer_block',
+                        label: { type: 'plain_text', text: 'Choose your answer:' },
+                        element: {
+                            type: 'radio_buttons',
+                            action_id: 'quiz_answer',
+                            options: quiz.options.map((opt) => ({
+                                text: { type: 'plain_text', text: opt },
+                                value: opt
+                            }))
+                        }
+                    }
+                ]
+            }
+        });
+    } catch (err) {
+        console.log(err);
+    }
 });
 
 app.view('quiz_submit', async ({ ack, body, view, client }) => {
@@ -393,7 +406,7 @@ app.view('quiz_submit', async ({ ack, body, view, client }) => {
         // Sesiune inexistentă sau expirat
         await client.chat.postMessage({
             channel: body.user.id,
-            text: ":warning: This quiz is no longer active.\n(ERROR: session has expired or does not exist)."
+            text: ':warning: This quiz is no longer active.\n(ERROR: session has expired or does not exist).'
         });
         return;
     }
@@ -454,7 +467,6 @@ app.view('quiz_submit', async ({ ack, body, view, client }) => {
     session.usersAnswered.push(body.user.id);
     console.log('Updated session with user answer:', session.usersAnswered);
 });
-
 
 (async () => {
     await app.start(process.env.PORT || 3000);
