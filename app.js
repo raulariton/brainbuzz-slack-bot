@@ -234,6 +234,9 @@ app.view('brainbuzz_modal', async ({ ack, body, view, client }) => {
         const endTime = now + durationSec * 1000;
         quizSessionMap.set(quiz.quiz_id, { quiz, endTime, usersAnswered: [] });
 
+        // print correct answer
+        console.log('Quiz correct answer:', quiz.answer);
+
         // start timeout
         // NOTE: do not use `await` since it will block the event loop
         handleQuizTimeout(quiz.quiz_id, endTime, app, quizSessionMap);
