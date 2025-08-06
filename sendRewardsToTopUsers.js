@@ -21,6 +21,7 @@ export async function sendRewardsToTopUsers(quizId, appInstance) {
     }
 
     const data = await response.json();
+    const otherUsers = data.otherUsersWithPlacement || [];
     const topUsersWithRewardImages = data.topUsersWithImages;
 
     if (!topUsersWithRewardImages || topUsersWithRewardImages.length === 0) {
@@ -39,6 +40,28 @@ export async function sendRewardsToTopUsers(quizId, appInstance) {
     }
 
     console.log("Sent the rewards to the top users successfully.");
+
+    for (const user of otherUsers) {
+    const userId = user.user_id;
+    const displayName = user.user_data.display_name || '';
+    const firstName = displayName.split(' ')[0];
+    const placement = user.placement;
+
+    await appInstance.client.chat.postMessage({
+      token: process.env.SLACK_BOT_TOKEN,
+      channel: userId,
+      text: `😢 Salut ${firstName}, ai ieșit pe locul ${placement} și nu ai primit un reward de data asta. Mult succes data viitoare!`,
+      blocks: [
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `😢 *Salut ${firstName}*, ai ieșit pe locul *${placement}* și nu ai primit un reward de data asta.\nDar ai fost aproape! Încearcă din nou la următorul quiz!`
+          }
+        }
+      ]
+    });
+  }
 
   } catch (error) {
     console.error(`Failed to fetch results for quiz ID ${quizId}:`, error.message);
