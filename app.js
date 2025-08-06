@@ -246,7 +246,8 @@ app.view('brainbuzz_modal', async ({ ack, body, view, client }) => {
         }
 
         try {
-            await client.chat.postMessage({
+            // 💡 Capturăm răspunsul Slack în `res`
+            const res = await client.chat.postMessage({
                 channel: targetChannel,
                 text: 'BrainBuzz Quiz!',
                 blocks: [
