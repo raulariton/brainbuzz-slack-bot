@@ -225,7 +225,6 @@ app.view('brainbuzz_modal', async ({ ack, body, view, client }) => {
             quiz = res.data; // { quiz_id, quizText, options, answer, imageUrl }
         } catch (err) {
             console.error('❌ Error fetching quiz:', err.message);
-            // opțional: trimite un mesaj de eroare user-ului
             return;
         }
 
@@ -246,11 +245,16 @@ app.view('brainbuzz_modal', async ({ ack, body, view, client }) => {
             history: 'Historical',
             funny: 'Funny/Icebreaker',
             movie: 'Popular quote'
+        };
+
+        function formatTime(seconds) {
+            const m = Math.floor(seconds / 60);
+            const s = seconds % 60;
+            return `${m}:${s.toString().padStart(2, '0')}`;
         }
 
         try {
-            // 💡 Capturăm răspunsul Slack în `res`
-            const res = await client.chat.postMessage({
+            const postResult = await client.chat.postMessage({
                 channel: targetChannel,
                 text: 'BrainBuzz Quiz!',
                 blocks: [
@@ -258,7 +262,7 @@ app.view('brainbuzz_modal', async ({ ack, body, view, client }) => {
                         type: 'section',
                         text: {
                             type: 'mrkdwn',
-                            text: `@${body.user.name} has started a new ${typeNameMap[quizType].toLowerCase()} quiz!\nClick the "Start Quiz" button below to give it a try.`
+                            text: `@${body.user.name} has started a new ${typeNameMap[quizType].toLowerCase()} quiz!\nClick the "Start Quiz" button below to give it a try.\n*Time remaining:* ${formatTime(durationSec)}`
                         },
                     },
                     {
@@ -279,6 +283,65 @@ app.view('brainbuzz_modal', async ({ ack, body, view, client }) => {
                     }
                 ]
             });
+
+            const messageTs = postResult.ts;
+
+            // 6. Update la fiecare 5 secunde
+            let remaining = durationSec;
+
+            const intervalId = setInterval(async () => {
+                remaining = Math.max(0, Math.floor((endTime - Date.now()) / 1000));
+
+                if (remaining <= 0) {
+                    clearInterval(intervalId);
+                    await client.chat.update({
+                        channel: targetChannel,
+                        ts: messageTs,
+                        text: 'Quiz closed!',
+                        blocks: [
+                            {
+                                type: 'section',
+                                text: {
+                                    type: 'mrkdwn',
+                                    text: `@${body.user.name}'s quiz has ended! ⏰`
+                                }
+                            }
+                        ]
+                    });
+                    return;
+                }
+
+                await client.chat.update({
+                    channel: targetChannel,
+                    ts: messageTs,
+                    blocks: [
+                        {
+                            type: 'section',
+                            text: {
+                                type: 'mrkdwn',
+                                text: `@${body.user.name} has started a new ${typeNameMap[quizType].toLowerCase()} quiz!\nClick the "Start Quiz" button below to give it a try.\n*Time remaining:* ${formatTime(remaining)}`
+                            }
+                        },
+                        {
+                            type: 'actions',
+                            elements: [
+                                {
+                                    type: 'button',
+                                    text: { type: 'plain_text', text: 'Start Quiz' },
+                                    action_id: 'start_quiz',
+                                    value: quiz.quiz_id
+                                }
+                            ]
+                        },
+                        {
+                            type: 'image',
+                            image_url: quiz.imageUrl,
+                            alt_text: 'Quiz Image'
+                        }
+                    ]
+                });
+            }, 5000);
+
         } catch (error) {
             console.error('❌ Error posting Start Quiz message:', error);
         }
