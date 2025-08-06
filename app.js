@@ -216,7 +216,7 @@ app.view('brainbuzz_modal', async ({ ack, body, view, client }) => {
         const res = await axios.get(
             `http://localhost:3000/quiz?type=${backendType}&duration=${durationSec}`
         );
-        quiz = res.data; // { quiz_id, quizText, options, answer }
+        quiz = res.data; // { quiz_id, quizText, options, answer, imageUrl }
     } catch (err) {
         console.error('❌ Error fetching quiz:', err.message);
         // opțional: trimite un mesaj de eroare user-ului
@@ -233,6 +233,12 @@ app.view('brainbuzz_modal', async ({ ack, body, view, client }) => {
     handleQuizTimeout(quiz.quiz_id, endTime, app, quizSessionMap);
 
     // 5️⃣ Trimite mesajul cu butonul “Start Quiz” (doar quiz_id în value)
+    const typeNameMap = {
+        history: 'Historical',
+        funny: 'Funny/Icebreaker',
+        movie: 'Popular quote'
+    }
+
     try {
         await client.chat.postMessage({
             channel: targetChannel,
@@ -240,7 +246,10 @@ app.view('brainbuzz_modal', async ({ ack, body, view, client }) => {
             blocks: [
                 {
                     type: 'section',
-                    text: { type: 'mrkdwn', text: '*Ready for the quiz?*' }
+                    text: {
+                        type: 'mrkdwn',
+                        text: `@${body.user.name} has started a new ${typeNameMap[quizType].toLowerCase()} quiz!\nClick the "Start Quiz" button below to give it a try.`
+                    },
                 },
                 {
                     type: 'actions',
@@ -252,6 +261,11 @@ app.view('brainbuzz_modal', async ({ ack, body, view, client }) => {
                             value: quiz.quiz_id
                         }
                     ]
+                },
+                {
+                    type: 'image',
+                    image_url: quiz.imageUrl,
+                    alt_text: 'Quiz Image'
                 }
             ]
         });
