@@ -184,7 +184,7 @@ app.command('/brainbuzz', async ({ ack, body, client }) => {
 });
 
 app.view('brainbuzz_modal', async ({ ack, body, view, client }) => {
-    // 1️⃣ Validări
+    // 1. Validări
     const errors = {};
     const quizTypeOpt = view.state.values.quiz_type_block.quiz_type.selected_option;
     const destinationOpt = view.state.values.destination_block.destination_select.selected_option;
@@ -200,7 +200,7 @@ app.view('brainbuzz_modal', async ({ ack, body, view, client }) => {
     }
     await ack();
 
-    // 2️⃣ Extrage valorile alese
+    // 2. Extrage valorile alese
     const quizType = quizTypeOpt.value;
     const durationSec = Number(durationOpt.value);
     const destination = destinationOpt.value;
@@ -208,7 +208,7 @@ app.view('brainbuzz_modal', async ({ ack, body, view, client }) => {
     const targetChannel =
         destination === 'private' ? body.user.id : (selectedChannel || body.channel?.id);
 
-    // 3️⃣ Fetch quiz-ul de la backend
+    // 3. Fetch quiz-ul de la backend
     let quiz;
     try {
         const typeMap = { history: 'historical', funny: 'icebreaker', movie: 'movie_quote' };
@@ -219,28 +219,32 @@ app.view('brainbuzz_modal', async ({ ack, body, view, client }) => {
         quiz = res.data; // { quiz_id, quizText, options, answer, imageUrl }
     } catch (err) {
         console.error('❌ Error fetching quiz:', err.message);
-        // opțional: trimite un mesaj de eroare user-ului
         return;
     }
 
-    // 4️⃣ Calculează endTime și stochează sesiunea
+    // 4. Calculează endTime și stochează sesiunea
     const now = Date.now();
     const endTime = now + durationSec * 1000;
     quizSessionMap.set(quiz.quiz_id, { quiz, endTime, usersAnswered: [] });
 
     // start timeout
-    // NOTE: do not use `await` since it will block the event loop
     handleQuizTimeout(quiz.quiz_id, endTime, app, quizSessionMap);
 
-    // 5️⃣ Trimite mesajul cu butonul “Start Quiz” (doar quiz_id în value)
+    // 5. Trimite mesajul cu butonul “Start Quiz”
     const typeNameMap = {
         history: 'Historical',
         funny: 'Funny/Icebreaker',
         movie: 'Popular quote'
+    };
+
+    function formatTime(seconds) {
+        const m = Math.floor(seconds / 60);
+        const s = seconds % 60;
+        return `${m}:${s.toString().padStart(2, '0')}`;
     }
 
     try {
-        await client.chat.postMessage({
+        const postResult = await client.chat.postMessage({
             channel: targetChannel,
             text: 'BrainBuzz Quiz!',
             blocks: [
@@ -248,7 +252,7 @@ app.view('brainbuzz_modal', async ({ ack, body, view, client }) => {
                     type: 'section',
                     text: {
                         type: 'mrkdwn',
-                        text: `@${body.user.name} has started a new ${typeNameMap[quizType].toLowerCase()} quiz!\nClick the "Start Quiz" button below to give it a try.`
+                        text: `@${body.user.name} has started a new ${typeNameMap[quizType].toLowerCase()} quiz!\nClick the "Start Quiz" button below to give it a try.\n*Time remaining:* ${formatTime(durationSec)}`
                     },
                 },
                 {
@@ -269,10 +273,70 @@ app.view('brainbuzz_modal', async ({ ack, body, view, client }) => {
                 }
             ]
         });
+
+        const messageTs = postResult.ts;
+
+        // 6. Update la fiecare 5 secunde
+        let remaining = durationSec;
+
+        const intervalId = setInterval(async () => {
+            remaining = Math.max(0, Math.floor((endTime - Date.now()) / 1000));
+
+            if (remaining <= 0) {
+                clearInterval(intervalId);
+                await client.chat.update({
+                    channel: targetChannel,
+                    ts: messageTs,
+                    text: 'Quiz closed!',
+                    blocks: [
+                        {
+                            type: 'section',
+                            text: {
+                                type: 'mrkdwn',
+                                text: `@${body.user.name}'s quiz has ended! ⏰`
+                            }
+                        }
+                    ]
+                });
+                return;
+            }
+
+            await client.chat.update({
+                channel: targetChannel,
+                ts: messageTs,
+                blocks: [
+                    {
+                        type: 'section',
+                        text: {
+                            type: 'mrkdwn',
+                            text: `@${body.user.name} has started a new ${typeNameMap[quizType].toLowerCase()} quiz!\nClick the "Start Quiz" button below to give it a try.\n*Time remaining:* ${formatTime(remaining)}`
+                        }
+                    },
+                    {
+                        type: 'actions',
+                        elements: [
+                            {
+                                type: 'button',
+                                text: { type: 'plain_text', text: 'Start Quiz' },
+                                action_id: 'start_quiz',
+                                value: quiz.quiz_id
+                            }
+                        ]
+                    },
+                    {
+                        type: 'image',
+                        image_url: quiz.imageUrl,
+                        alt_text: 'Quiz Image'
+                    }
+                ]
+            });
+        }, 5000);
+
     } catch (error) {
         console.error('❌ Error posting Start Quiz message:', error);
     }
 });
+
 
 app.action('start_quiz', async ({ ack, body, client }) => {
     await ack();
