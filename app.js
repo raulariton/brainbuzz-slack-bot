@@ -1,16 +1,14 @@
 import dotenv from 'dotenv';
+
 dotenv.config({ quiet: true });
 
 import pkg from '@slack/bolt';
 import axios from 'axios';
 import { createClient } from '@supabase/supabase-js';
+import { handleQuizTimeout } from './handleQuizTimeout.js';
 
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_KEY;
-const supabase = createClient(supabaseUrl, supabaseKey);
+const supabaseClient = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 
-const quizConfigMap = new Map();
-const timeoutMap = new Map();
 const quizSessionMap = new Map();
 
 const { App } = pkg;
@@ -19,43 +17,7 @@ const app = new App({
     token: process.env.SLACK_BOT_TOKEN,
     signingSecret: process.env.SLACK_SIGNING_SECRET,
     socketMode: true,
-    appToken: process.env.SLACK_APP_TOKEN,
-});
-
-
-// Listen to incoming messages that contain "ceau"
-app.message('ceau', async ({ message, say }) => {
-    await say(`Ceau Sefule <@${message.user}>!`);
-});
-
-// Listen to incoming messages that contain "hello"
-app.message('hello', async ({ message, say }) => {
-    app.logger.info(`Received a message from user ${message.user}: ${message.text}`);
-    await say(`Hello <@${message.user}>!`);
-});
-
-// Listen to incoming messages that contain "special"
-app.message('special', async ({ message, say }) => {
-    await say({
-        blocks: [
-            {
-                "type": "actions",
-                "elements": [
-                    {
-                        "type": "button",
-                        "text": {
-                            "type": "plain_text",
-                            "text": "Click me!",
-                            "emoji": true
-                        },
-                        "value": "click_me_123",
-                        "action_id": "button_click"
-                    }
-                ],
-            }
-        ],
-        text: "Click the button below to interact with me!"
-    });
+    appToken: process.env.SLACK_APP_TOKEN
 });
 
 // Slash command for the quiz
@@ -63,13 +25,14 @@ app.command('/brainbuzz', async ({ ack, body, client }) => {
     await ack();
     try {
         // 1. Verifică dacă există un quiz activ
-        const { data: activeQuiz, error } = await supabase
+        const { data: activeQuiz, error } = await supabaseClient
             .from('quizzes')
             .select('*')
             .eq('is_active', true)
             .single();
 
-        if (error && error.code !== 'PGRST116') { // PGRST116 = no rows found
+        if (error && error.code !== 'PGRST116') {
+            // PGRST116 = no rows found
             console.error('Error checking active quiz:', error);
             return;
         }
@@ -79,7 +42,7 @@ app.command('/brainbuzz', async ({ ack, body, client }) => {
             await client.chat.postEphemeral({
                 channel: body.channel_id,
                 user: body.user_id,
-                text: '⚠️ Există deja un quiz activ! Așteaptă să expire înainte de a crea unul nou.'
+                text: ":warning: There is already an active quiz!."
             });
             return;
         }
@@ -90,7 +53,7 @@ app.command('/brainbuzz', async ({ ack, body, client }) => {
                 callback_id: 'brainbuzz_modal',
                 title: {
                     type: 'plain_text',
-                    text: 'BrainBuzz Quiz',
+                    text: 'BrainBuzz Quiz'
                 },
                 submit: {
                     type: 'plain_text',
@@ -113,7 +76,10 @@ app.command('/brainbuzz', async ({ ack, body, client }) => {
                             },
                             options: [
                                 {
-                                    text: { type: 'plain_text', text: 'Historical/current events based on the current date' },
+                                    text: {
+                                        type: 'plain_text',
+                                        text: 'Historical/current events based on the current date'
+                                    },
                                     value: 'history'
                                 },
                                 {
@@ -121,7 +87,10 @@ app.command('/brainbuzz', async ({ ack, body, client }) => {
                                     value: 'funny'
                                 },
                                 {
-                                    text: { type: 'plain_text', text: 'Movie/TV Quote Identification' },
+                                    text: {
+                                        type: 'plain_text',
+                                        text: 'Movie/TV Quote Identification'
+                                    },
                                     value: 'movie'
                                 }
                             ]
@@ -186,19 +155,19 @@ app.command('/brainbuzz', async ({ ack, body, client }) => {
                             action_id: 'quiz_duration',
                             placeholder: {
                                 type: 'plain_text',
-                                text: 'Selectează durata quiz-ului'
+                                text: 'Select the duration of the quiz'
                             },
                             options: [
-                                { text: { type: 'plain_text', text: '10 secunde' }, value: '10' },
-                                { text: { type: 'plain_text', text: '30 secunde' }, value: '30' },
-                                { text: { type: 'plain_text', text: '1 minut' }, value: '60' },
-                                { text: { type: 'plain_text', text: '5 minute' }, value: '300' },
-                                { text: { type: 'plain_text', text: '10 minute' }, value: '600' },
-                                { text: { type: 'plain_text', text: '30 minute' }, value: '1800' },
-                                { text: { type: 'plain_text', text: '1 ora' }, value: '3600' },
-                                { text: { type: 'plain_text', text: '2 ore' }, value: '7200' },
-                                { text: { type: 'plain_text', text: '4 ore' }, value: '14400' },
-                                { text: { type: 'plain_text', text: '8 ore' }, value: '28800' }
+                                { text: { type: 'plain_text', text: '10 seconds' }, value: '10' },
+                                { text: { type: 'plain_text', text: '30 seconds' }, value: '30' },
+                                { text: { type: 'plain_text', text: '1 minute' }, value: '60' },
+                                { text: { type: 'plain_text', text: '5 minutes' }, value: '300' },
+                                { text: { type: 'plain_text', text: '10 minutes' }, value: '600' },
+                                { text: { type: 'plain_text', text: '30 minutes' }, value: '1800' },
+                                { text: { type: 'plain_text', text: '1 hour' }, value: '3600' },
+                                { text: { type: 'plain_text', text: '2 hours' }, value: '7200' },
+                                { text: { type: 'plain_text', text: '4 hours' }, value: '14400' },
+                                { text: { type: 'plain_text', text: '8 hours' }, value: '28800' }
                             ]
                         },
                         label: {
@@ -213,9 +182,6 @@ app.command('/brainbuzz', async ({ ack, body, client }) => {
         console.error('Error opening BrainBuzz modal:', error);
     }
 });
-
-
-
 
 app.view('brainbuzz_modal', async ({ ack, body, view, client }) => {
     // 1️⃣ Validări
@@ -239,16 +205,17 @@ app.view('brainbuzz_modal', async ({ ack, body, view, client }) => {
     const durationSec = Number(durationOpt.value);
     const destination = destinationOpt.value;
     const selectedChannel = view.state.values.channel_block.channel_select?.selected_conversation;
-    const targetChannel = destination === 'private'
-        ? body.user.id
-        : (selectedChannel || body.channel?.id);
+    const targetChannel =
+        destination === 'private' ? body.user.id : (selectedChannel || body.channel?.id);
 
     // 3️⃣ Fetch quiz-ul de la backend
     let quiz;
     try {
         const typeMap = { history: 'historical', funny: 'icebreaker', movie: 'movie_quote' };
         const backendType = typeMap[quizType] || quizType;
-        const res = await axios.get(`http://localhost:3000/quiz?type=${backendType}&duration=${durationSec}`);
+        const res = await axios.get(
+            `http://localhost:3000/quiz?type=${backendType}&duration=${durationSec}`
+        );
         quiz = res.data; // { quiz_id, quizText, options, answer }
     } catch (err) {
         console.error('❌ Error fetching quiz:', err.message);
@@ -259,7 +226,11 @@ app.view('brainbuzz_modal', async ({ ack, body, view, client }) => {
     // 4️⃣ Calculează endTime și stochează sesiunea
     const now = Date.now();
     const endTime = now + durationSec * 1000;
-    quizSessionMap.set(quiz.quiz_id, { quiz, endTime });
+    quizSessionMap.set(quiz.quiz_id, { quiz, endTime, usersAnswered: [] });
+
+    // start timeout
+    // NOTE: do not use `await` since it will block the event loop
+    handleQuizTimeout(quiz.quiz_id, endTime, app, quizSessionMap);
 
     // 5️⃣ Trimite mesajul cu butonul “Start Quiz” (doar quiz_id în value)
     try {
@@ -289,7 +260,6 @@ app.view('brainbuzz_modal', async ({ ack, body, view, client }) => {
     }
 });
 
-
 app.action('start_quiz', async ({ ack, body, client }) => {
     await ack();
 
@@ -310,11 +280,20 @@ app.action('start_quiz', async ({ ack, body, client }) => {
                         type: 'section',
                         text: {
                             type: 'mrkdwn',
-                            text: ':warning: This quiz is no longer active.'
+                            text: ":warning: This quiz is no longer active."
                         }
                     }
                 ]
             }
+        });
+    }
+
+    // if user already answered the quiz, do not open modal
+    if (session.usersAnswered?.includes(body.user.id)) {
+        return await client.chat.postEphemeral({
+            channel: body.channel.id,
+            user: body.user.id,
+            text: ":warning: You have already answered this quiz! You can't answer twice!"
         });
     }
 
@@ -378,7 +357,7 @@ app.action('start_quiz', async ({ ack, body, client }) => {
                     element: {
                         type: 'radio_buttons',
                         action_id: 'quiz_answer',
-                        options: quiz.options.map(opt => ({
+                        options: quiz.options.map((opt) => ({
                             text: { type: 'plain_text', text: opt },
                             value: opt
                         }))
@@ -387,51 +366,11 @@ app.action('start_quiz', async ({ ack, body, client }) => {
             ]
         }
     });
-
-    // 5️⃣ Pornește timeout-ul global
-    const viewId = modal.view.id;
-    const timeoutId = setTimeout(async () => {
-        try {
-            await client.views.update({
-                view_id: viewId,
-                view: {
-                    type: 'modal',
-                    title: { type: 'plain_text', text: 'BrainBuzz Quiz' },
-                    close: { type: 'plain_text', text: 'Close' },
-                    blocks: [
-                        {
-                            type: 'section',
-                            text: {
-                                type: 'mrkdwn',
-                                text: ':x: _Failed to complete quiz in the given time._'
-                            }
-                        }
-                    ]
-                }
-            });
-        } catch (err) {
-            console.error('Error closing quiz on timeout:', err);
-        }
-        timeoutMap.delete(viewId);
-    }, remainingMs);
-
-    timeoutMap.set(viewId, timeoutId);
 });
-
-
-
-
 
 app.view('quiz_submit', async ({ ack, body, view, client }) => {
     // Acknowledge the submission
     await ack();
-
-    // 1️⃣ Anulează timer-ul dacă există
-    const timeoutId = timeoutMap.get(view.id);
-    if (timeoutId) {
-        clearTimeout(timeoutId);
-        timeoutMap.delete(view.id);
-    }
 
     // 2️⃣ Extrage quiz_id din private_metadata și sesiunea asociată
     const quizId = view.private_metadata;
@@ -440,7 +379,17 @@ app.view('quiz_submit', async ({ ack, body, view, client }) => {
         // Sesiune inexistentă sau expirat
         await client.chat.postMessage({
             channel: body.user.id,
-            text: ':warning: This quiz is no longer active.'
+            text: ":warning: This quiz is no longer active.\n(ERROR: session has expired or does not exist)."
+        });
+        return;
+    }
+
+    // check if user already answered the quiz
+    if (session.usersAnswered?.includes(body.user.id)) {
+        await client.chat.postEphemeral({
+            channel: body.channel.id,
+            user: body.user.id,
+            text: ":warning: You have already answered this quiz! You can't answer twice!\n(ERROR: user already answered, but modal still opened)."
         });
         return;
     }
@@ -483,18 +432,13 @@ app.view('quiz_submit', async ({ ack, body, view, client }) => {
             }
         });
         console.log('✅ Answer sent to backend successfully.');
-    } catch (err) {
-        console.error('❌ Failed to send answer to backend:', err.message);
+    } catch (error) {
+        console.error('❌ Failed to send answer to backend:', error.message);
     }
 
-    // 6️⃣ Cleanup: șterge sesiunea dacă nu va fi folosită din nou
-    quizSessionMap.delete(quizId);
-});
-
-
-app.action('button_click', async ({ body, ack, say }) => {
-    await ack();
-    await say(`Hey <@${body.user.id}>! You clicked the button!`);
+    // update session with user answer
+    session.usersAnswered.push(body.user.id);
+    console.log('Updated session with user answer:', session.usersAnswered);
 });
 
 

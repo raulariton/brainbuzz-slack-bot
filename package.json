@@ -24,10 +24,12 @@
     "@supabase/supabase-js": "^2.53.0",
     "axios": "^1.11.0",
     "dotenv": "^17.2.0",
-    "node-fetch": "^3.3.2"
+    "node-fetch": "^3.3.2",
+    "ordinal": "^1.0.3"
   },
   "keywords": [],
   "devDependencies": {
-    "nodemon": "^3.1.10"
+    "nodemon": "^3.1.10",
+    "prettier": "3.6.2"
   }
 }
