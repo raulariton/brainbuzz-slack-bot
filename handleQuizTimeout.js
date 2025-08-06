@@ -1,5 +1,7 @@
 import { sendRewardsToTopUsers } from './sendRewardsToTopUsers.js';
 import axios from 'axios';
+import fetch from 'node-fetch';
+import ordinal from 'ordinal';
 
 export async function handleQuizTimeout(quizId, quizEndTime, app, quizSessionMap) {
     const now = new Date();
@@ -13,27 +15,43 @@ export async function handleQuizTimeout(quizId, quizEndTime, app, quizSessionMap
 
     console.log(`Setting timeout for quiz with ID ${quizId} for ${remainingMs} ms.`);
 
+    let topUsersWithImages = [];
     setTimeout(async () => {
         console.log(`Quiz with ID ${quizId} has timed out.`);
 
+        // fetch results from the guiz engine
+        try {
+            const response = await fetch(
+                'http://localhost:3000/results',
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ quizId: quizId })
+                });
+
+            if (!response.ok) {
+                console.error(`Failed to fetch results for quiz ID ${quizId}:`, error.message);
+                return;
+            }
+
+            const data = await response.json();
+            topUsersWithImages = data.topUsersWithImages;
+
+        } catch (error) {
+            console.error(`Failed to fetch results for quiz ID ${quizId}:`, error.message);
+            return;
+        }
+
         // fetch results from quiz engine and send rewards to top 3 users
-        await sendRewardsToTopUsers(quizId, app);
+        await sendRewardsToTopUsers(quizId, topUsersWithImages, app);
 
         const session = quizSessionMap.get(quizId);
         if (!session) {
             console.warn(`No session found for quiz ${quizId}, skipping summary post.`);
             return;
         }
-        const totalParticipants = session?.usersAnswered?.length || 0;
 
-        let topUsers = [];
-        try {
-            const res = await axios.post('http://localhost:3000/results', { quizId });
-            console.log('🔎 topUsersWithImages:', res.data.topUsersWithImages);
-            topUsers = res.data.topUsersWithImages || [];
-        } catch (err) {
-            console.log('Error fetching the summary results:', err);
-        }
+        const totalParticipants = session?.usersAnswered?.length || 0;
 
         const summaryBlocks = [
             {
@@ -46,19 +64,20 @@ export async function handleQuizTimeout(quizId, quizEndTime, app, quizSessionMap
         ];
 
         // 1️⃣ Listează primele 3 locuri
-        topUsers.slice(0, 3).forEach((user, i) => {
+        topUsersWithImages.slice(0, 3).forEach((user, i) => {
             const userId = user.userId || user.user_id;
+            const displayName = user.user_data.display_name;
             const imageUrl = user.rewardImage;
             summaryBlocks.push({
                 type: 'section',
                 text: {
                     type: 'mrkdwn',
-                    text: `*${i + 1}.* <@${userId}>`
+                    text: `*${ordinal(i + 1)} place* - <@${userId}>`
                 },
                 accessory: {
                     type: 'image',
                     image_url: imageUrl,
-                    alt_text: `Reward pentru ${userId}`
+                    alt_text: `Reward for ${user.user_data.display_name}`
                 }
             });
         });
@@ -69,7 +88,7 @@ export async function handleQuizTimeout(quizId, quizEndTime, app, quizSessionMap
             elements: [
                 {
                     type: 'mrkdwn',
-                    text: `🎉 There were *${totalParticipants}* users.`
+                    text: `🎉 A total of *${totalParticipants}* user(s) participated in the quiz.`
                 }
             ]
         });
@@ -78,10 +97,10 @@ export async function handleQuizTimeout(quizId, quizEndTime, app, quizSessionMap
         await app.client.chat.postMessage({
             channel: session.channel,
             thread_ts: session.threadTs,
-            text: `Quiz ${quizId} is over! Top 3: ${topUsers
-                .slice(0, 3)
-                .map((u, i) => `${i + 1}. <@${u.userId || u.user_id}>`)
-                .join(', ')}`,
+
+            // notification text
+            text: `BrainBuzz quiz over! Check out the results!`,
+
             blocks: summaryBlocks
         });
         console.log(`Deleting quiz session with ID ${quizId} from the map.`);
