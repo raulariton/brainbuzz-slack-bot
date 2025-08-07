@@ -23,13 +23,11 @@ export async function handleQuizTimeout(quizId, quizEndTime, app, quizSessionMap
 
         // fetch results from the guiz engine
         try {
-            const response = await fetch(
-                'http://localhost:3000/results',
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ quizId: quizId })
-                });
+            const response = await fetch('http://localhost:3000/results', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ quizId: quizId })
+            });
 
             if (!response.ok) {
                 console.error(`Failed to fetch results for quiz ID ${quizId}:`, error.message);
@@ -39,7 +37,6 @@ export async function handleQuizTimeout(quizId, quizEndTime, app, quizSessionMap
             const data = await response.json();
             topUsersWithImages = data.topUsersWithImages;
             otherUsers = data.otherUsers;
-
         } catch (error) {
             console.error(`Failed to fetch results for quiz ID ${quizId}:`, error.message);
             return;
@@ -67,14 +64,24 @@ export async function handleQuizTimeout(quizId, quizEndTime, app, quizSessionMap
         ];
 
         if (!topUsersWithImages || topUsersWithImages.length === 0) {
-            summaryBlocks.push({
-                type: 'section',
-                text: {
-                    type: 'mrkdwn',
-                    text: 'No users answered the quiz.'
-                }
-            });
-            // Post the summary and exit
+            if (totalParticipants === 0) {
+                summaryBlocks.push({
+                    type: 'section',
+                    text: {
+                        type: 'mrkdwn',
+                        text: 'No one participated in the quiz.'
+                    }
+                });
+            } else {
+                summaryBlocks.push({
+                    type: 'section',
+                    text: {
+                        type: 'mrkdwn',
+                        text: `Nobody answered correctly, but ${totalParticipants} ${totalParticipants > 1 ? 'participants' : 'participant'} tried!`
+                    }
+                });
+            }
+
             await app.client.chat.postMessage({
                 channel: session.channel,
                 thread_ts: session.threadTs,
