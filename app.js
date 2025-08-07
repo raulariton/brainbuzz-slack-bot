@@ -195,7 +195,7 @@ app.view('brainbuzz_modal', async ({ ack, body, view, client }) => {
         const destinationOpt =
             view.state.values.destination_block.destination_select.selected_option;
         const durationOpt = view.state.values.quiz_duration_block.quiz_duration.selected_option;
-
+        
         if (!quizTypeOpt) errors.quiz_type_block = 'You must select a quiz type.';
         if (!destinationOpt) errors.destination_block = 'You must select a destination.';
         if (!durationOpt) errors.quiz_duration_block = 'You must select a duration.';
@@ -234,6 +234,22 @@ app.view('brainbuzz_modal', async ({ ack, body, view, client }) => {
 
         // print correct answer
         console.log('Quiz correct answer:', quiz.answer);
+
+        // Meta: cine a creat quiz-ul, ce tip și care e întrebarea
+        const quizTypeLabel = quizTypeOpt.text.text;
+        const questionText = quiz.quizText;
+        const creatorId = body.user.id;
+        quizSessionMap.set(
+            quiz.quiz_id,
+            {
+                quiz,
+                endTime,
+                usersAnswered: [],
+                creatorId,
+                type: quizTypeLabel,
+                question: questionText
+            }
+        );
 
         // start timeout
         // NOTE: do not use `await` since it will block the event loop
@@ -286,15 +302,10 @@ app.view('brainbuzz_modal', async ({ ack, body, view, client }) => {
             const messageTs = postResult.ts;
 
             quizSessionMap.set(quiz.quiz_id, {
-                quiz,
-                endTime,
-                usersAnswered: [],
+                ...quizSessionMap.get(quiz.quiz_id),
                 channel: postResult.channel,
-                threadTs: messageTs
+                threadTs: messageTs,
             });
-
-            // added by dennis
-            // handleQuizTimeout(quiz.quiz_id, endTime, app, quizSessionMap);
 
             // 6. Update la fiecare 5 secunde
             let remaining = durationSec;
@@ -507,11 +518,40 @@ app.view('quiz_submit', async ({ ack, body, view, client }) => {
 
     // 4️⃣ Trimite feedback către user
     try {
+        // Preluăm sesiunea și meta-informațiile
+        const session = quizSessionMap.get(quizId);
+        const { creatorId, type: quizTypeLabel, question } = session;
+
+        // Luăm numele creatorului
+        const creatorInfo = await client.users.info({ user: creatorId });
+        const creatorName =
+            creatorInfo.user.profile.display_name ||
+            creatorInfo.user.profile.real_name ||
+            creatorInfo.user.name;
+
+        // Construim textul
+        let text;
+        if (correct) {
+            text = [
+                '🎉 Well done! That’s the correct answer.',
+                `This quiz was created by: *${creatorName}*`,
+                `Quiz type: *${quizTypeLabel}*`,
+                `Question: _${question}_`
+            ].join('\n');
+        } else {
+            text = [
+                '❌ Oops, that was incorrect.',
+                `The correct answer was: *${correctAnswer}*`,
+                `You selected: *${selected}*`,
+                `This quiz was created by: *${creatorName}*`,
+                `Quiz type: *${quizTypeLabel}*`,
+                `Question: _${question}_`
+            ].join('\n');
+        }
+
         await client.chat.postMessage({
             channel: body.user.id,
-            text: correct
-                ? `✅ Correct! The answer is *${correctAnswer}*.`
-                : `❌ Wrong! You selected *${selected}*, but the correct answer was *${correctAnswer}*.`
+            text
         });
     } catch (err) {
         console.error('Error sending feedback to user:', err);
