@@ -16,6 +16,8 @@ export async function handleQuizTimeout(quizId, quizEndTime, app, quizSessionMap
     console.log(`Setting timeout for quiz with ID ${quizId} for ${remainingMs} ms.`);
 
     let topUsersWithImages = [];
+    let otherUsers = [];
+
     setTimeout(async () => {
         console.log(`Quiz with ID ${quizId} has timed out.`);
 
@@ -36,6 +38,7 @@ export async function handleQuizTimeout(quizId, quizEndTime, app, quizSessionMap
 
             const data = await response.json();
             topUsersWithImages = data.topUsersWithImages;
+            otherUsers = data.otherUsers;
 
         } catch (error) {
             console.error(`Failed to fetch results for quiz ID ${quizId}:`, error.message);
@@ -43,7 +46,7 @@ export async function handleQuizTimeout(quizId, quizEndTime, app, quizSessionMap
         }
 
         // fetch results from quiz engine and send rewards to top 3 users
-        await sendRewardsToTopUsers(quizId, topUsersWithImages, app);
+        await sendRewardsToTopUsers(quizId, topUsersWithImages, otherUsers, app);
 
         const session = quizSessionMap.get(quizId);
         if (!session) {
@@ -63,8 +66,28 @@ export async function handleQuizTimeout(quizId, quizEndTime, app, quizSessionMap
             }
         ];
 
+        if (!topUsersWithImages || topUsersWithImages.length === 0) {
+            summaryBlocks.push({
+                type: 'section',
+                text: {
+                    type: 'mrkdwn',
+                    text: 'No users answered the quiz.'
+                }
+            });
+            // Post the summary and exit
+            await app.client.chat.postMessage({
+                channel: session.channel,
+                thread_ts: session.threadTs,
+                text: `BrainBuzz quiz over! Check out the results!`,
+                blocks: summaryBlocks
+            });
+            console.log(`Deleting quiz session with ID ${quizId} from the map.`);
+            quizSessionMap.delete(quizId);
+            return;
+        }
+
         // 1️⃣ Listează primele 3 locuri
-        topUsersWithImages.slice(0, 3).forEach((user, i) => {
+        topUsersWithImages?.slice(0, 3).forEach((user, i) => {
             const userId = user.userId || user.user_id;
             const displayName = user.user_data.display_name;
             const imageUrl = user.rewardImage;

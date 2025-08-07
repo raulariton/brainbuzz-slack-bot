@@ -231,7 +231,6 @@ app.view('brainbuzz_modal', async ({ ack, body, view, client }) => {
         // 4️⃣ Calculează endTime și stochează sesiunea
         const now = Date.now();
         const endTime = now + durationSec * 1000;
-        quizSessionMap.set(quiz.quiz_id, { quiz, endTime, usersAnswered: [] });
 
         // print correct answer
         console.log('Quiz correct answer:', quiz.answer);
@@ -285,6 +284,17 @@ app.view('brainbuzz_modal', async ({ ack, body, view, client }) => {
             });
 
             const messageTs = postResult.ts;
+
+            quizSessionMap.set(quiz.quiz_id, {
+                quiz,
+                endTime,
+                usersAnswered: [],
+                channel: postResult.channel,
+                threadTs: messageTs
+            });
+
+            // added by dennis
+            // handleQuizTimeout(quiz.quiz_id, endTime, app, quizSessionMap);
 
             // 6. Update la fiecare 5 secunde
             let remaining = durationSec;
