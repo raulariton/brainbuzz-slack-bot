@@ -226,7 +226,21 @@ app.view('brainbuzz_modal', async ({ ack, body, view, client }) => {
     // 4️⃣ Calculează endTime și stochează sesiunea
     const now = Date.now();
     const endTime = now + durationSec * 1000;
-    quizSessionMap.set(quiz.quiz_id, { quiz, endTime, usersAnswered: [] });
+    // Meta: cine a creat quiz-ul, ce tip și care e întrebarea
+    const quizTypeLabel = quizTypeOpt.text.text;
+    const questionText = quiz.quizText;
+    const creatorId = body.user.id;
+    quizSessionMap.set(
+        quiz.quiz_id,
+        {
+            quiz,
+            endTime,
+            usersAnswered: [],
+            creatorId,
+            type: quizTypeLabel,
+            question: questionText
+        }
+    );
 
     // start timeout
     // NOTE: do not use `await` since it will block the event loop
@@ -403,11 +417,40 @@ app.view('quiz_submit', async ({ ack, body, view, client }) => {
 
     // 4️⃣ Trimite feedback către user
     try {
+        // Preluăm sesiunea și meta-informațiile
+        const session = quizSessionMap.get(quizId);
+        const { creatorId, type: quizTypeLabel, question } = session;
+
+        // Luăm numele creatorului
+        const creatorInfo = await client.users.info({ user: creatorId });
+        const creatorName =
+            creatorInfo.user.profile.display_name ||
+            creatorInfo.user.profile.real_name ||
+            creatorInfo.user.name;
+
+        // Construim textul
+        let text;
+        if (correct) {
+            text = [
+                '🎉 Well done! That’s the correct answer.',
+                `This quiz was created by: *${creatorName}*`,
+                `Quiz type: *${quizTypeLabel}*`,
+                `Question: _${question}_`
+            ].join('\n');
+        } else {
+            text = [
+                '❌ Oops, that was incorrect.',
+                `The correct answer was: *${correctAnswer}*`,
+                `You selected: *${selected}*`,
+                `This quiz was created by: *${creatorName}*`,
+                `Quiz type: *${quizTypeLabel}*`,
+                `Question: _${question}_`
+            ].join('\n');
+        }
+
         await client.chat.postMessage({
             channel: body.user.id,
-            text: correct
-                ? `✅ Correct! The answer is *${correctAnswer}*.`
-                : `❌ Wrong! You selected *${selected}*, but the correct answer was *${correctAnswer}*.`
+            text
         });
     } catch (err) {
         console.error('Error sending feedback to user:', err);
