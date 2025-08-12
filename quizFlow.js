@@ -1,4 +1,5 @@
     import axios from "axios";
+    import { handleQuizTimeout } from './handleQuizTimeout.js';
 
     
 export async function startQuizFlow({
@@ -31,9 +32,17 @@ export async function startQuizFlow({
     const quiz = res.data;
     if (!quiz) throw new Error("No quiz data received");
 
+    // print correct answer
+    console.log('Quiz correct answer:', quiz.answer);
+
     // 3️⃣ Calculează endTime și creează ID pentru sesiune
     const now = Date.now();
+    // NOTE: hardcoded duration
     const endTime = now + durationSec * 1000;
+    // NOTE: quiz_id is received from backend
+    if (!quiz.quiz_id) {
+      console.warn("Quiz ID not provided, generating a new one.");
+    }
     const quizId = quiz.quiz_id || `quiz_${Date.now()}`;
 
     // 4️⃣ Stochează sesiunea în map
@@ -68,7 +77,7 @@ export async function startQuizFlow({
           type: "section",
           text: {
             type: "mrkdwn",
-            text: `@${user.name} has started a new ${typeNameMap[quizType]?.toLowerCase() || quizType} quiz!\nClick the *Start Quiz* button below to give it a try.\n*Time remaining:* ${formatTime(durationSec)}`,
+            text: `It's too quiet in here! Anyone up for a ${typeNameMap[quizType]?.toLowerCase() || quizType} quiz!\nClick the *Start Quiz* button below to give it a try.\n*Time remaining:* ${formatTime(durationSec)}`,
           },
         },
         {
@@ -163,9 +172,11 @@ export async function startQuizFlow({
     }, 5000);
 
     // 9️⃣ Poți să apelezi aici funcția de timeout dacă o ai, ex:
-    // handleQuizTimeout(quizId, endTime, app, quizSessionMap);
+    handleQuizTimeout(quizId, endTime, app, quizSessionMap);
 
+    // NOTE: returning quizId is done
     return quizId; // întoarce id-ul quiz-ului
+U
   } catch (err) {
     console.error("❌ Eroare în startQuizFlow:", err);
     return null;

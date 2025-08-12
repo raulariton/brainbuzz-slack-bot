@@ -524,11 +524,17 @@ app.view('quiz_submit', async ({ ack, body, view, client }) => {
         const { creatorId, type: quizTypeLabel, question } = session;
 
         // Luăm numele creatorului
-        const creatorInfo = await client.users.info({ user: creatorId });
-        const creatorName =
+        let creatorName;
+        try {
+          const creatorInfo = await client.users.info({ user: creatorId });
+
+          const creatorName =
             creatorInfo.user.profile.display_name ||
             creatorInfo.user.profile.real_name ||
             creatorInfo.user.name;
+        } catch (error) {
+          creatorName = 'Unknown Creator';
+        }
 
         // Construim textul
         let text;
