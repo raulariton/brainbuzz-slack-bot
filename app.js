@@ -4,6 +4,7 @@ dotenv.config({ quiet: true });
 
 import pkg from '@slack/bolt';
 import axios from 'axios';
+import initSlackAutoQuiz from "./slackAutoQuiz.js";
 import { createClient } from '@supabase/supabase-js';
 import { handleQuizTimeout } from './handleQuizTimeout.js';
 
@@ -298,7 +299,7 @@ app.view('brainbuzz_modal', async ({ ack, body, view, client }) => {
                     }
                 ]
             });
-
+            
             const messageTs = postResult.ts;
 
             quizSessionMap.set(quiz.quiz_id, {
@@ -362,7 +363,7 @@ app.view('brainbuzz_modal', async ({ ack, body, view, client }) => {
                     ]
                 });
             }, 5000);
-
+            console.log('Feedback message sent to user', body.user.id);
         } catch (error) {
             console.error('❌ Error posting Start Quiz message:', error);
         }
@@ -486,7 +487,7 @@ app.action('start_quiz', async ({ ack, body, client }) => {
 app.view('quiz_submit', async ({ ack, body, view, client }) => {
     // Acknowledge the submission
     await ack();
-
+    console.log('User ID primit din body:', body.user.id);
     // 2️⃣ Extrage quiz_id din private_metadata și sesiunea asociată
     const quizId = view.private_metadata;
     const session = quizSessionMap.get(quizId);
@@ -523,11 +524,17 @@ app.view('quiz_submit', async ({ ack, body, view, client }) => {
         const { creatorId, type: quizTypeLabel, question } = session;
 
         // Luăm numele creatorului
-        const creatorInfo = await client.users.info({ user: creatorId });
-        const creatorName =
+        let creatorName;
+        try {
+          const creatorInfo = await client.users.info({ user: creatorId });
+
+          const creatorName =
             creatorInfo.user.profile.display_name ||
             creatorInfo.user.profile.real_name ||
             creatorInfo.user.name;
+        } catch (error) {
+          creatorName = 'Unknown Creator';
+        }
 
         // Construim textul
         let text;
@@ -588,4 +595,6 @@ app.view('quiz_submit', async ({ ack, body, view, client }) => {
 (async () => {
     await app.start(process.env.PORT || 3000);
     app.logger.info('BrainBuzz is up and running!');
+
+    initSlackAutoQuiz(app, quizSessionMap);
 })();
