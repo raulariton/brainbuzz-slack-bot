@@ -11,8 +11,8 @@ export default function initSlackAutoQuiz(app, quizSessionMap) {
   }
 
   async function wasChannelActiveRecently(channelId, hours = 2) {
-    // corectat interval la 2 ore (2*3600*1000 ms)
-    const sinceTs = (Date.now() - 120 * 1000) / 1000;
+    // check every `hours` hours
+    const sinceTs = (Date.now() - hours * 3600 * 1000) / 1000;
     const history = await app.client.conversations.history({
       channel: channelId,
       oldest: sinceTs.toString(),
@@ -22,10 +22,11 @@ export default function initSlackAutoQuiz(app, quizSessionMap) {
   }
 
   async function autoPostQuiz() {
+    const hourFrequency = 2;
     try {
-      const active = await wasChannelActiveRecently(AUTO_CHANNEL_ID, 2);
+      const active = await wasChannelActiveRecently(AUTO_CHANNEL_ID, hourFrequency);
       if (active) {
-        console.log("⚠️ Canalul a fost activ în ultimele 2 ore. Nu postez quiz.");
+        console.log(`⚠️ Canalul a fost activ în ultimele ${hourFrequency} ore. Nu postez quiz.`);
         return;
       }
 
