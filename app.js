@@ -94,6 +94,13 @@ app.command('/brainbuzz', async ({ ack, body, client }) => {
                                         text: 'Movie/TV Quote Identification'
                                     },
                                     value: 'movie'
+                                },
+                                {
+                                    text: {
+                                        type: 'plain_text',
+                                        text: 'Computer Trivia (e.g. programming languages, tech history)'
+                                    },
+                                    value: 'computer_trivia'
                                 }
                             ]
                         },
@@ -236,7 +243,7 @@ app.view('brainbuzz_modal', async ({ ack, body, view, client }) => {
         // 3️⃣ Fetch quiz-ul de la backend
         let quiz;
         try {
-            const typeMap = { history: 'historical', funny: 'icebreaker', movie: 'movie_quote' };
+            const typeMap = { history: 'historical', funny: 'icebreaker', movie: 'movie_quote', computer_trivia: 'computer_trivia' };
             const backendType = typeMap[quizType] || quizType;
             const res = await axios.get(
                 `http://localhost:3000/quiz?type=${backendType}&duration=${durationSec}`
@@ -278,7 +285,8 @@ app.view('brainbuzz_modal', async ({ ack, body, view, client }) => {
         const typeNameMap = {
             history: 'Historical',
             funny: 'Funny/Icebreaker',
-            movie: 'Popular quote'
+            movie: 'Popular quote',
+            computer_trivia: 'Computer Trivia'
         };
 
         function formatTime(seconds) {

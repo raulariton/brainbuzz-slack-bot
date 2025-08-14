@@ -21,6 +21,7 @@ export async function startQuizFlow({
       history: "historical", // suportă sinonime
       funny: "icebreaker",
       movie: "movie_quote",
+      computer_trivia: "computer_trivia",
     };
 
     const backendType = typeMap[quizType] || quizType;
