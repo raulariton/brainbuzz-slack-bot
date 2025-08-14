@@ -52,8 +52,8 @@ export default function initSlackAutoQuiz(app, quizSessionMap) {
     }
   }
 
-  // Interval la 10 minute (600000 ms)
-  setInterval(autoPostQuiz, 15 * 1000);
+  // Interval la 2 ore
+  setInterval(autoPostQuiz, 2 * 60 * 60 * 1000);
 
   // Optional: poți să pornești prima oară imediat
   autoPostQuiz();
