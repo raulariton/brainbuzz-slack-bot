@@ -4,7 +4,7 @@ import { startQuizFlow } from "./quizFlow.js"; // ajustează calea corect
 export default function initSlackAutoQuiz(app, quizSessionMap) {
   const AUTO_CHANNEL_ID = process.env.SLACK_CHANNEL_ID;
 
-  const quizTypes = ["historical", "icebreaker", "movie_quote"];
+  const quizTypes = ["historical", "icebreaker", "movie_quote", "computer_trivia"];
 
   function getRandomType() {
     return quizTypes[Math.floor(Math.random() * quizTypes.length)];
@@ -52,8 +52,8 @@ export default function initSlackAutoQuiz(app, quizSessionMap) {
     }
   }
 
-  // Interval la 10 minute (600000 ms)
-  setInterval(autoPostQuiz, 15 * 1000);
+  // Interval la 2 ore
+  setInterval(autoPostQuiz, 2 * 60 * 60 * 1000);
 
   // Optional: poți să pornești prima oară imediat
   autoPostQuiz();

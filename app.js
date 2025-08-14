@@ -94,6 +94,13 @@ app.command('/brainbuzz', async ({ ack, body, client }) => {
                                         text: 'Movie/TV Quote Identification'
                                     },
                                     value: 'movie'
+                                },
+                                {
+                                    text: {
+                                        type: 'plain_text',
+                                        text: 'Computer Trivia (e.g. programming languages, tech history)'
+                                    },
+                                    value: 'computer_trivia'
                                 }
                             ]
                         },
@@ -212,13 +219,31 @@ app.view('brainbuzz_modal', async ({ ack, body, view, client }) => {
         const destination = destinationOpt.value;
         const selectedChannel =
             view.state.values.channel_block.channel_select?.selected_conversation;
-        const targetChannel =
-            destination === 'private' ? body.user.id : selectedChannel || originChannel;
+
+        /**
+         * the target channel is the channel ID of the channe; where the quiz will be posted.
+         * if the destination is 'private', it will be the ID of the DM channel to the user.
+         * If the destination is 'channel', it will be the selected channel or the origin channel.
+         * If no channel is selected, it will default to the origin channel.
+         */
+        let targetChannel;
+        if (destination === 'private') {
+            targetChannel = await client.conversations.open({
+                users: body.user.id
+            }).then(res => res.channel.id);
+        } else if (destination === 'channel' && selectedChannel) {
+            // if a channel is selected, use that channel
+            targetChannel = selectedChannel;
+        }
+        else {
+            // if no channel is selected, use the origin channel
+            targetChannel = originChannel;
+        }
 
         // 3️⃣ Fetch quiz-ul de la backend
         let quiz;
         try {
-            const typeMap = { history: 'historical', funny: 'icebreaker', movie: 'movie_quote' };
+            const typeMap = { history: 'historical', funny: 'icebreaker', movie: 'movie_quote', computer_trivia: 'computer_trivia' };
             const backendType = typeMap[quizType] || quizType;
             const res = await axios.get(
                 `http://localhost:3000/quiz?type=${backendType}&duration=${durationSec}`
@@ -260,7 +285,8 @@ app.view('brainbuzz_modal', async ({ ack, body, view, client }) => {
         const typeNameMap = {
             history: 'Historical',
             funny: 'Funny/Icebreaker',
-            movie: 'Popular quote'
+            movie: 'Popular quote',
+            computer_trivia: 'Computer Trivia'
         };
 
         function formatTime(seconds) {
@@ -269,9 +295,15 @@ app.view('brainbuzz_modal', async ({ ack, body, view, client }) => {
             return `${m}:${s.toString().padStart(2, '0')}`;
         }
 
+        // NOTE: for some reason i have to reassign targetChannel
+        //  to another constant targetChannel2
+        //  because using targetChannel in `postMessage` gave me
+        //  a ReferenceError that targetChannel is not defined yet
+        const targetChannel2 = targetChannel;
+        console.log('Target channel for quiz:', targetChannel2);
         try {
             const postResult = await client.chat.postMessage({
-                channel: targetChannel,
+                channel: targetChannel2,
                 text: 'BrainBuzz Quiz!',
                 blocks: [
                     {
@@ -528,7 +560,7 @@ app.view('quiz_submit', async ({ ack, body, view, client }) => {
         try {
           const creatorInfo = await client.users.info({ user: creatorId });
 
-          const creatorName =
+          creatorName =
             creatorInfo.user.profile.display_name ||
             creatorInfo.user.profile.real_name ||
             creatorInfo.user.name;
