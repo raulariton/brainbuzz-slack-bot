@@ -1,4 +1,3 @@
-import axios from 'axios';
 import ServerClient from '../../services/serverClient.js';
 import QuizSessionManager from '../../utils/QuizSessionManager.js';
 
@@ -39,51 +38,26 @@ export default (app) => {
         const selected = view.state.values.quiz_answer_block.quiz_answer.selected_option.value;
         const correct = selected === correctAnswer;
 
-        // 4️⃣ Trimite feedback către user
+        // 4️⃣ Trimite confirmare către user
         try {
             // Preluăm sesiunea și meta-informațiile
             const session = QuizSessionManager.getQuizSessionMetadata(quizId)
-            const { creatorId, type: quizTypeLabel, question } = session;
-
-            // Luăm numele creatorului
-            let creatorName;
-            try {
-                const creatorInfo = await client.users.info({ user: creatorId });
-
-                creatorName =
-                    creatorInfo.user.profile.display_name ||
-                    creatorInfo.user.profile.real_name ||
-                    creatorInfo.user.name;
-            } catch (error) {
-                creatorName = 'Unknown Creator';
-            }
-
-            // Construim textul
-            let text;
-            if (correct) {
-                text = [
-                    '🎉 Well done! That’s the correct answer.',
-                    `This quiz was created by: *${creatorName}*`,
-                    `Quiz type: *${quizTypeLabel}*`,
-                    `Question: _${question}_`
-                ].join('\n');
-            } else {
-                text = [
-                    '❌ Oops, that was incorrect.',
-                    `The correct answer was: *${correctAnswer}*`,
-                    `You selected: *${selected}*`,
-                    `This quiz was created by: *${creatorName}*`,
-                    `Quiz type: *${quizTypeLabel}*`,
-                    `Question: _${question}_`
-                ].join('\n');
-            }
+            const { creatorUserID, channelID } = session;
 
             await client.chat.postMessage({
                 channel: body.user.id,
-                text
+                blocks: [
+                    {
+                        type: 'section',
+                        text: {
+                            type: 'mrkdwn',
+                            text: `✅ *I've registered your answer to the quiz created by <@${creatorUserID}>!*\nCheck back in <#${channelID}> to see the results when the quiz ends.`
+                        }
+                    }
+                ]
             });
         } catch (err) {
-            console.error('Error sending feedback to user:', err);
+            console.error('Error sending confirmation message to user:', err);
         }
 
         // 5️⃣ Trimite răspunsul către backend
