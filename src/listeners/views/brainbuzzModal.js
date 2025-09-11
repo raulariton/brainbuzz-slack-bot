@@ -53,7 +53,7 @@ export default (app) => {
             }
 
             const typeMap = { history: 'historical', funny: 'icebreaker', movie: 'movie_quote', computer_trivia: 'computer_trivia' };
-            const backendType = typeMap[quizType] || quizType;
+            let backendType = typeMap[quizType] || quizType;
 
             await postQuiz(backendType, durationSec, targetChannel, app, body.user.id)
 

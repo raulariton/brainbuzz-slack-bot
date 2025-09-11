@@ -2,6 +2,7 @@ import ServerClient from '../services/serverClient.js';
 import moment from 'moment';
 import { handleQuizTimeout } from './handleQuizTimeout.js';
 import QuizSessionManager from './QuizSessionManager.js';
+import quizTypes from '../utils/quizTypes.json' with { type: 'json' };
 
 export async function postQuiz(quizType, durationSec, targetChannel, app, creatorId = null) {
     // get quiz
@@ -27,6 +28,9 @@ export async function postQuiz(quizType, durationSec, targetChannel, app, creato
     //  because using targetChannel in `postMessage` gave me
     //  a ReferenceError that targetChannel is not defined yet
     const targetChannel2 = targetChannel;
+
+    // replace quizType with the human-readable version
+    quizType = quizTypes[quizType] || quizType;
 
     // post message with "Start Quiz" button
     try {
@@ -97,9 +101,9 @@ function getStartQuizMessageBlock(remainingSec, quizType, creatorID = null) {
 
 
     if (creatorID) {
-        return `<@${creatorID}> has started a new ${quizType.toLowerCase()} quiz!\nClick the "Start Quiz" button below to give it a try.\n*Time remaining:* ${remainingCountdown}`;
+        return `<@${creatorID}> has started a new *${quizType} quiz*!\nClick the "Start Quiz" button below to give it a try.\n*Time remaining:* ${remainingCountdown}`;
     } else {
-        return `It's too quiet in here! Anyone up for a ${quizType.toLowerCase()} quiz?\nClick the "Start Quiz" button below to give it a try.\n*Time remaining:* ${remainingCountdown}`;
+        return `It's too quiet in here! Anyone up for a *${quizType} quiz*?\nClick the "Start Quiz" button below to give it a try.\n*Time remaining:* ${remainingCountdown}`;
     }
 }
 
