@@ -55,11 +55,6 @@ export async function postQuiz(quizType, durationSec, targetChannel, app, creato
                             value: quiz.quiz_id
                         }
                     ]
-                },
-                {
-                    type: 'image',
-                    image_url: quiz.imageUrl,
-                    alt_text: 'Quiz Image'
                 }
             ]
         });
@@ -184,11 +179,6 @@ function updateMessageWithCountdown(
                                 value: quiz.quiz_id
                             }
                         ]
-                    },
-                    {
-                        type: 'image',
-                        image_url: quiz.imageUrl,
-                        alt_text: 'Quiz Image'
                     }
                 ]
             });

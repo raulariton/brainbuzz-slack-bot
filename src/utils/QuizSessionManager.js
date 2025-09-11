@@ -3,7 +3,6 @@
  * @property {string} quizText - The quiz question text
  * @property {string[]} options - Array of possible answers
  * @property {string} answer - The correct answer
- * @property {string} imageUrl - URL of the image to be attached with the quiz message post
  */
 
 /**
