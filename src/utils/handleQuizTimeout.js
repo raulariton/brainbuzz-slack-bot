@@ -1,9 +1,9 @@
 import { sendRewardsToTopUsers } from './sendRewardsToTopUsers.js';
-import axios from 'axios';
-import fetch from 'node-fetch';
 import ordinal from 'ordinal';
+import ServerClient from '../services/serverClient.js';
+import QuizSessionManager from './QuizSessionManager.js';
 
-export async function handleQuizTimeout(quizId, quizEndTime, app, quizSessionMap) {
+export async function handleQuizTimeout(quizId, quizEndTime, app) {
     const now = new Date();
     const remainingMs = quizEndTime - now;
 
@@ -23,18 +23,8 @@ export async function handleQuizTimeout(quizId, quizEndTime, app, quizSessionMap
 
         // fetch results from the guiz engine
         try {
-            const response = await fetch('http://localhost:3000/results', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ quizId: quizId })
-            });
+            const data = await ServerClient.getResults(quizId)
 
-            if (!response.ok) {
-                console.error(`Failed to fetch results for quiz ID ${quizId}:`, error.message);
-                return;
-            }
-
-            const data = await response.json();
             topUsersWithImages = data.topUsersWithImages;
             otherUsers = data.otherUsers;
         } catch (error) {
@@ -45,7 +35,7 @@ export async function handleQuizTimeout(quizId, quizEndTime, app, quizSessionMap
         // fetch results from quiz engine and send rewards to top 3 users
         await sendRewardsToTopUsers(quizId, topUsersWithImages, otherUsers, app);
 
-        const session = quizSessionMap.get(quizId);
+        const session = QuizSessionManager.getQuizSessionMetadata(quizId);
         if (!session) {
             console.warn(`No session found for quiz ${quizId}, skipping summary post.`);
             return;
@@ -83,13 +73,13 @@ export async function handleQuizTimeout(quizId, quizEndTime, app, quizSessionMap
             }
 
             await app.client.chat.postMessage({
-                channel: session.channel,
-                thread_ts: session.threadTs,
+                channel: session.channelID,
+                thread_ts: session.messageTS,
                 text: `BrainBuzz quiz over! Check out the results!`,
                 blocks: summaryBlocks
             });
             console.log(`Deleting quiz session with ID ${quizId} from the map.`);
-            quizSessionMap.delete(quizId);
+            QuizSessionManager.clear(quizId);
             return;
         }
 
@@ -125,8 +115,8 @@ export async function handleQuizTimeout(quizId, quizEndTime, app, quizSessionMap
 
         // 3️⃣ Postează în thread, cu text fallback
         await app.client.chat.postMessage({
-            channel: session.channel,
-            thread_ts: session.threadTs,
+            channel: session.channelID,
+            thread_ts: session.messageTS,
 
             // notification text
             text: `BrainBuzz quiz over! Check out the results!`,
@@ -134,6 +124,6 @@ export async function handleQuizTimeout(quizId, quizEndTime, app, quizSessionMap
             blocks: summaryBlocks
         });
         console.log(`Deleting quiz session with ID ${quizId} from the map.`);
-        quizSessionMap.delete(quizId);
+        QuizSessionManager.clear(quizId);
     }, remainingMs);
 }

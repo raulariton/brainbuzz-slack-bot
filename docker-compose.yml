@@ -1,0 +1,7 @@
+services:
+  slack-bot:
+    image: ghcr.io/raulariton/brainbuzz-slack-bot:latest
+    env_file:
+      - .env.docker
+    ports:
+      - "3000:3000"
