@@ -5,5 +5,7 @@ node_modules/
 .idea/
 .vscode/
 
+# exclude .env.example
+!.env.example
 .env
-.env.docker
+.env.*
