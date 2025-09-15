@@ -1,9 +1,16 @@
 import axios from 'axios';
 
+const axiosClient = axios.create({
+    baseURL: process.env.BACKEND_URL,
+    headers: {
+        Authorization: `Bearer ${process.env.BACKEND_KEY}`,
+    },
+    timeout: 15000, // 15 seconds timeout
+})
+
 class ServerClient {
     static async getQuiz(type, duration) {
-        const url = `${process.env.BACKEND_URL}/quiz`;
-        const response = await axios.get(url, {
+        const response = await axiosClient.get('/quiz', {
             params: {
                 type: type,
                 duration: duration
@@ -14,8 +21,7 @@ class ServerClient {
     }
 
     static async sendUserAnswer(quizId, userId, userData, isCorrectAnswer) {
-        const url = `${process.env.BACKEND_URL}/answers`;
-        const response = await axios.post(url, {
+        const response = await axiosClient.post('/answers', {
             quiz_id: quizId,
             user_id: userId,
             user_data: userData,
@@ -26,8 +32,7 @@ class ServerClient {
     }
 
     static async getResults(quizId) {
-        const url = `${process.env.BACKEND_URL}/results`;
-        const response = await axios.post(url, {
+        const response = await axiosClient.post('/results', {
             quizId: quizId,
         });
 
