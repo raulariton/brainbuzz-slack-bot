@@ -53,7 +53,7 @@ class AutoPostQuizService {
 
         // channel was not active, post a quiz
         try {
-            await postQuiz(backendType, quizDurationSec, this.channelId, this.app)
+            await postQuiz(backendType, quizDurationSec, this.channelId, this.app, null, randomType)
         } catch (error) {
             console.error("Error running auto post quiz routine: ", error);
         }

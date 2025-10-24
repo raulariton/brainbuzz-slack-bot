@@ -4,7 +4,14 @@ import { handleQuizTimeout } from './handleQuizTimeout.js';
 import QuizSessionManager from './QuizSessionManager.js';
 import quizTypes from '../utils/quizTypes.json' with { type: 'json' };
 
-export async function postQuiz(quizType, durationSec, targetChannel, app, creatorId = null) {
+export async function postQuiz(
+    quizType,
+    durationSec,
+    targetChannel,
+    app,
+    creatorId = null,
+    quizReadableType
+) {
     // get quiz
     let quiz;
     try {
@@ -42,7 +49,7 @@ export async function postQuiz(quizType, durationSec, targetChannel, app, creato
                     type: 'section',
                     text: {
                         type: 'mrkdwn',
-                        text: `${getStartQuizMessageBlock(durationSec, quizType, creatorId)}`
+                        text: `${getStartQuizMessageBlock(durationSec, quizReadableType, creatorId)}`
                     }
                 },
                 {
@@ -81,7 +88,7 @@ export async function postQuiz(quizType, durationSec, targetChannel, app, creato
             message.channel,
             message.ts,
             durationSec,
-            quizType,
+            quizReadableType,
             creatorId
         );
     } catch (error) {

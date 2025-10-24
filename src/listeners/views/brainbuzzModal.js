@@ -24,6 +24,7 @@ export default (app) => {
 
             // 2️⃣ Extrage valorile alese
             const quizType = quizTypeOpt.value;
+            const humanReadableQuizType = quizTypeOpt.text.text;
             const durationSec = Number(durationOpt.value);
             const targetChannel =
                 view.state.values.channel_block.channel_select?.selected_conversation;
@@ -31,7 +32,14 @@ export default (app) => {
             const typeMap = { history: 'historical', funny: 'icebreaker', movie: 'movie_quote', computer_trivia: 'computer_trivia' };
             let backendType = typeMap[quizType] || quizType;
 
-            await postQuiz(backendType, durationSec, targetChannel, app, body.user.id)
+            await postQuiz(
+                backendType,
+                durationSec,
+                targetChannel,
+                app,
+                body.user.id,
+                humanReadableQuizType
+            );
 
             // // 3️⃣ Fetch quiz-ul de la backend
             // let quiz;
