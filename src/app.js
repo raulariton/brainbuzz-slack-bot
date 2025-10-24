@@ -12,7 +12,8 @@ const { App } = pkg;
 const app = new App({
     token: process.env.SLACK_BOT_TOKEN,
     signingSecret: process.env.SLACK_SIGNING_SECRET,
-    logLevel: LogLevel.ERROR
+    socketMode: true,
+    appToken: process.env.SLACK_APP_TOKEN,
 });
 
 // register listeners
@@ -23,5 +24,5 @@ quizSubmit(app);
 
 (async () => {
     await app.start(process.env.PORT);
-    console.log(`BrainBuzz is up and running!\nPort ${process.env.PORT}`);
+    console.log(`BrainBuzz Dev is up and running!\nPort ${process.env.PORT}`);
 })();

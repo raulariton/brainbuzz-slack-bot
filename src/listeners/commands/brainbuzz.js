@@ -5,7 +5,7 @@ import supabaseClient from '../../services/supabaseClient.js';
  */
 export default (app) => {
     // Slash command for the quiz
-    app.command('/brainbuzz', async ({ ack, body, client }) => {
+    app.command('/brainbuzzdev', async ({ ack, body, client }) => {
         await ack();
         try {
             // 1. Verifică dacă există un quiz activ
