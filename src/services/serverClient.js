@@ -38,6 +38,27 @@ class ServerClient {
 
         return response.data;
     }
+
+    static async getQuizTypes() {
+        // get quiz types from backend endpoint
+        const response = await axiosClient.get('/quiz-types', {
+            params: {
+                // TODO: support multiple languages
+                lang: 'en'
+            }
+        });
+
+        // map quiz types to slack select menu options format
+        return response.data.quizTypes.map(quizType => {
+            return {
+              text: {
+                type: 'plain_text',
+                text: quizType.value,
+              },
+              value: quizType.key,
+            }
+        })
+    }
 }
 
 export default ServerClient;
