@@ -5,57 +5,41 @@ import { postQuiz } from '../../utils/commonMethods.js';
  */
 export default (app) => {
     app.view('brainbuzz_modal', async ({ ack, body, view, client }) => {
+        await ack();
         try {
-            await ack();
             // 1️⃣ Validări
             const metadata = view.private_metadata ? JSON.parse(view.private_metadata) : {};
             const originChannel = metadata.originChannel;
             const errors = {};
             const quizTypeOpt = view.state.values.quiz_type_block.quiz_type.selected_option;
-            const destinationOpt =
-                view.state.values.destination_block.destination_select.selected_option;
             const durationOpt = view.state.values.quiz_duration_block.quiz_duration.selected_option;
 
             if (!quizTypeOpt) errors.quiz_type_block = 'You must select a quiz type.';
-            if (!destinationOpt) errors.destination_block = 'You must select a destination.';
             if (!durationOpt) errors.quiz_duration_block = 'You must select a duration.';
 
             if (Object.keys(errors).length > 0) {
-                await ack({ response_action: 'errors', errors });
+                // await ack({ response_action: 'errors', errors });
                 return;
             }
 
             // 2️⃣ Extrage valorile alese
             const quizType = quizTypeOpt.value;
+            const humanReadableQuizType = quizTypeOpt.text.text;
             const durationSec = Number(durationOpt.value);
-            const destination = destinationOpt.value;
-            const selectedChannel =
+            const targetChannel =
                 view.state.values.channel_block.channel_select?.selected_conversation;
-
-            /**
-             * the target channel is the channel ID of the channel; where the quiz will be posted.
-             * if the destination is 'private', it will be the ID of the DM channel to the user.
-             * If the destination is 'channel', it will be the selected channel or the origin channel.
-             * If no channel is selected, it will default to the origin channel.
-             */
-            let targetChannel;
-            if (destination === 'private') {
-                targetChannel = await client.conversations.open({
-                    users: body.user.id
-                }).then(res => res.channel.id);
-            } else if (destination === 'channel' && selectedChannel) {
-                // if a channel is selected, use that channel
-                targetChannel = selectedChannel;
-            }
-            else {
-                // if no channel is selected, use the origin channel
-                targetChannel = originChannel;
-            }
 
             const typeMap = { history: 'historical', funny: 'icebreaker', movie: 'movie_quote', computer_trivia: 'computer_trivia' };
             let backendType = typeMap[quizType] || quizType;
 
-            await postQuiz(backendType, durationSec, targetChannel, app, body.user.id)
+            await postQuiz(
+                backendType,
+                durationSec,
+                targetChannel,
+                app,
+                body.user.id,
+                humanReadableQuizType
+            );
 
             // // 3️⃣ Fetch quiz-ul de la backend
             // let quiz;
