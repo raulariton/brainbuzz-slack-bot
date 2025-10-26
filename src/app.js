@@ -12,7 +12,17 @@ const { App } = pkg;
 const app = new App({
     token: process.env.SLACK_BOT_TOKEN,
     signingSecret: process.env.SLACK_SIGNING_SECRET,
-    logLevel: LogLevel.ERROR
+    logLevel: LogLevel.ERROR,
+    customRoutes: [
+        {
+            path: '/ping',
+            method: ['GET'],
+            handler: async (req, res) => {
+                res.writeHead(200);
+                res.end('pong');
+            }
+        }
+    ]
 });
 
 // register listeners
