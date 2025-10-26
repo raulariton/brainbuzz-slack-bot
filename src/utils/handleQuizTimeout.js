@@ -48,7 +48,7 @@ export async function handleQuizTimeout(quizId, quizEndTime, app) {
                 type: 'section',
                 text: {
                     type: 'mrkdwn',
-                    text: `*🏁 The quiz is over!*\n✅ Correct answer: *${session.quiz.answer}*`
+                    text: `*🏁 The quiz is over!*\n❔ ${session.quiz.quizText}\n✅ Correct answer: *${session.quiz.answer}*`
                 }
             }
         ];
