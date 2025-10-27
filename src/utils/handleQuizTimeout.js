@@ -1,4 +1,4 @@
-import { sendRewardsToTopUsers } from './sendRewardsToTopUsers.js';
+import { sendResultsToUsers } from './sendResultsToUsers.js';
 import ordinal from 'ordinal';
 import ServerClient from '../services/serverClient.js';
 import QuizSessionManager from './QuizSessionManager.js';
@@ -32,8 +32,8 @@ export async function handleQuizTimeout(quizId, quizEndTime, app) {
             return;
         }
 
-        // fetch results from quiz engine and send rewards to top 3 users
-        await sendRewardsToTopUsers(quizId, topUsersWithImages, otherUsers, app);
+        // fetch results from quiz engine and send results to top 3 users
+        await sendResultsToUsers(quizId, topUsersWithImages, otherUsers, app);
 
         const session = QuizSessionManager.getQuizSessionMetadata(quizId);
         if (!session) {
@@ -83,10 +83,10 @@ export async function handleQuizTimeout(quizId, quizEndTime, app) {
             return;
         }
 
-        // 1️⃣ Listează primele 3 locuri
+        // List the top 3 users with their reward images (if any)
         topUsersWithImages?.slice(0, 3).forEach((user, i) => {
             const userId = user.userId || user.user_id;
-            const displayName = user.user_data.display_name;
+            const userProfilePictureURL = user.profilePicture || user.user_data?.profile_picture_url;
             const imageUrl = user.rewardImage;
             summaryBlocks.push({
                 type: 'section',
@@ -94,11 +94,19 @@ export async function handleQuizTimeout(quizId, quizEndTime, app) {
                     type: 'mrkdwn',
                     text: `*${ordinal(i + 1)} place* - <@${userId}>`
                 },
-                accessory: {
-                    type: 'image',
-                    image_url: imageUrl,
-                    alt_text: `Reward for ${user.user_data.display_name}`
-                }
+                ... (imageUrl ? {
+                    accessory: {
+                        type: 'image',
+                        image_url: imageUrl,
+                        alt_text: `Reward for ${user.user_data.display_name}`
+                    }
+                } : {
+                    accessory: {
+                        type: 'image',
+                        image_url: userProfilePictureURL,
+                        alt_text: `Profile picture of ${user.displayName || user.user_data?.display_name || 'user'}`
+                    }
+                })
             });
         });
 
